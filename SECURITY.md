@@ -17,7 +17,7 @@ Anyone who can attach to the inspector during the bootstrap window can execute c
 
 ## Mods and remote code
 
-The v0.5.0 core is bundled into the preload. It does not load remote code or a remote plugin registry. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh` time.
+The v0.6.0 core is bundled into the preload. It does not load remote code or a remote plugin registry. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh` time.
 
 Plugin code runs in the renderer preload context through a capability context. It does not receive Node.js, Electron IPC, or TVMod's main-process APIs. The test probe confirms `require`, `process`, `globalThis.require`, and `globalThis.process` are unavailable inside a plugin. Plugins can still use page APIs such as `fetch`, `WebSocket`, and direct DOM access, so treat third-party plugins as trusted local code and review them before installing.
 
@@ -48,4 +48,4 @@ TVMod intentionally does not touch paywall, trial, entitlement, account, or cred
 
 ## Releases
 
-Release artifacts should be checksummed and signed. The v0.5.0 CI workflow publishes unsigned artifacts; treat them as development builds.
+Release artifacts should be checksummed and signed. The v0.6.0 CI workflow publishes unsigned artifacts; treat them as development builds.

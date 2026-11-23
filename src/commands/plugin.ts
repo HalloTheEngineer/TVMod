@@ -9,7 +9,11 @@ import {
   writeInstalledPreload,
 } from '../lib/plugin-files.js';
 import { UserError } from '../lib/errors.js';
-import { displayPath, pluginsDir } from '../lib/paths.js';
+import {
+  displayPath,
+  pluginsDir,
+  preloadTargetForFlavor,
+} from '../lib/paths.js';
 import { readState } from '../lib/state.js';
 import { heading, info, label, ok, warn } from '../lib/logger.js';
 
@@ -27,7 +31,11 @@ function warnIfPatched(): void {
 }
 
 function refresh(): void {
-  const result = writeInstalledPreload();
+  const state = readState();
+  const target =
+    state?.preloadPath ??
+    preloadTargetForFlavor(state?.app.flavor ?? 'custom');
+  const result = writeInstalledPreload(target);
   for (const error of result.errors) {
     warn(`plugin ${error.id}: ${error.message}`);
   }

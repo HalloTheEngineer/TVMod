@@ -17,6 +17,14 @@ export const logsDir = path.join(stateDir, 'logs');
 export const launchLog = path.join(logsDir, 'launch.log');
 export const stateFile = path.join(configDir, 'state.json');
 export const preloadTarget = path.join(dataDir, 'preload.js');
+export const snapPreloadTarget = path.join(
+  home,
+  'snap',
+  'tradingview',
+  'common',
+  'tvmod',
+  'preload.js'
+);
 export const backupsDir = path.join(dataDir, 'backups');
 export const pluginsDir = path.join(dataDir, 'plugins');
 export const copiedAppDir = path.join(home, '.local', 'opt', 'tradingview');
@@ -35,6 +43,10 @@ export const vanillaDesktopFile = path.join(
 );
 export const desktopBackupFile = `${desktopFile}.tvmod-backup`;
 export const wrapperBackupFile = `${wrapperPath}.tvmod-backup`;
+
+export function preloadTargetForFlavor(flavor: string): string {
+  return flavor === 'snap' ? snapPreloadTarget : preloadTarget;
+}
 
 export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });

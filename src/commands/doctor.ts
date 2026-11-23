@@ -11,6 +11,8 @@ import {
   displayPath,
   launchLog,
   preloadTarget,
+  preloadTargetForFlavor,
+  snapPreloadTarget,
   wrapperPath,
   desktopFile,
 } from '../lib/paths.js';
@@ -43,10 +45,12 @@ export function doctorCommand(options: DoctorOptions): void {
   label('flavor', describeFlavor(install.flavor));
   label('executable', install.exe);
   label('app.asar', install.asar ?? 'not found');
-  label('preload', displayPath(preloadTarget));
+  const preloadPath =
+    state?.preloadPath ?? preloadTargetForFlavor(install.flavor);
+  label('preload', displayPath(preloadPath));
 
-  if (fs.existsSync(preloadTarget)) {
-    label('preload hash', sha256File(preloadTarget).slice(0, 16));
+  if (fs.existsSync(preloadPath)) {
+    label('preload hash', sha256File(preloadPath).slice(0, 16));
   } else {
     warn('preload is not installed; run "tvmod install"');
   }
@@ -80,6 +84,8 @@ export function doctorCommand(options: DoctorOptions): void {
   label('running', pids.length > 0 ? `yes (${pids.length} processes)` : 'no');
 
   if (install.flavor === 'snap') {
-    warn('Snap support is experimental; launcher injection may be blocked by confinement.');
+    label('snap preload', displayPath(snapPreloadTarget));
+    warn('Snap support is experimental; validate inspector binding and preload reads under confinement.');
+    warn('Run tools/snap/probe.sh on this Snap host.');
   }
 }

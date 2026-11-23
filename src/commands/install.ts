@@ -21,6 +21,7 @@ import {
   stateDir,
   wrapperPath,
   copiedAppDir,
+  preloadTargetForFlavor,
 } from '../lib/paths.js';
 import { tradingViewPids } from '../lib/proc.js';
 import { readState, writeState } from '../lib/state.js';
@@ -75,7 +76,8 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   ensureDir(stateDir);
   ensureDir(logsDir);
 
-  const pluginResult = writeInstalledPreload();
+  const preloadPath = preloadTargetForFlavor(install.flavor);
+  const pluginResult = writeInstalledPreload(preloadPath);
 
   const wrapper = writeWrapper(process.argv[1] ?? source);
   const entries = writeDesktopEntries(install, wrapper);
@@ -99,7 +101,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
       command: install.command,
       baseArgs: install.baseArgs,
     },
-    preloadPath: preloadTarget,
+    preloadPath: pluginResult.path,
     wrapperPath: wrapper,
     desktopFile: entries.desktop,
     ...(preservedPatch ? { patch: preservedPatch } : {}),
@@ -116,11 +118,11 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   label('TradingView', `${install.version ?? 'unknown version'} (${describeFlavor(install.flavor)})`);
   label('executable', install.exe);
   label('app.asar', install.asar ?? 'not found (launcher only)');
-  label('preload', displayPath(preloadTarget));
+  label('preload', displayPath(pluginResult.path));
   label('wrapper', displayPath(wrapperPath));
   label('desktop', displayPath(entries.desktop));
   label('external plugins', String(pluginResult.count));
-  label('preload sha256', sha256File(preloadTarget).slice(0, 16));
+  label('preload sha256', sha256File(pluginResult.path).slice(0, 16));
 
   for (const error of pluginResult.errors) {
     warn(`plugin ${error.id}: ${error.message}`);
@@ -143,6 +145,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   }
 
   if (install.flavor === 'snap') {
-    warn('Snap support is experimental: the confined app may block the local inspector.');
+    warn('Snap support is experimental: validate the local inspector and preload under confinement.');
+    warn('Run tools/snap/probe.sh on this Snap host and report the result.');
   }
 }

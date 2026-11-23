@@ -207,7 +207,9 @@ export function composePreload(
   return `globalThis.__TVMOD_EXTERNAL_PLUGINS__ = ${serialized};\n${baseSource}`;
 }
 
-export function writeInstalledPreload(): {
+export function writeInstalledPreload(
+  target = preloadTarget
+): {
   count: number;
   errors: PluginScan['errors'];
   path: string;
@@ -216,13 +218,13 @@ export function writeInstalledPreload(): {
   const scan = readInstalledPlugins();
   const composed = composePreload(base, scan.plugins);
 
-  ensureDir(path.dirname(preloadTarget));
-  fs.writeFileSync(preloadTarget, composed, { mode: 0o644 });
+  ensureDir(path.dirname(target));
+  fs.writeFileSync(target, composed, { mode: 0o644 });
 
   return {
     count: scan.plugins.length,
     errors: scan.errors,
-    path: preloadTarget,
+    path: target,
   };
 }
 

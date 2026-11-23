@@ -4,6 +4,7 @@ import { UserError } from '../lib/errors.js';
 import {
   dataDir,
   displayPath,
+  snapPreloadTarget,
   stateFile,
   wrapperPath,
 } from '../lib/paths.js';
@@ -29,6 +30,10 @@ export function uninstallCommand(options: UninstallOptions): void {
 
   if (options.purge) {
     fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(snapPreloadTarget.replace(/\/preload\.js$/, ''), {
+      recursive: true,
+      force: true,
+    });
   }
 
   heading('TVMod uninstalled');

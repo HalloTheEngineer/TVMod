@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop** on Linux.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.5.0, launcher + patched-copy/in-place installer + local plugin SDK**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation; Snap validation is future work.
+> Status: **v0.6.0, launcher + patched-copy/in-place installer + local plugin SDK**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host.
 
 ## Features
 
@@ -20,6 +20,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **In-place system patch** — `tvmod patch --system --yes` runs sudo/pkexec only for the `app.asar` replacement; backups and state stay user-owned.
 - **Restart prompt** — clicking the icon while TradingView is open offers to close and relaunch it (Zenity/KDialog or a terminal prompt).
 - **Compatibility census** — a weekly Playwright census of the public chart page detects missing `data-name` selectors and boot/global APIs, with a committed baseline.
+- **Snap-aware launcher** — detects `/snap/bin/tradingview`, uses `snap run`, and keeps the preload in `~/snap/tradingview/common/tvmod/`.
 - **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
 
 ## Requirements
@@ -37,7 +38,7 @@ Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Rel
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf tvmod-0.5.0-linux-x64.tar.gz
+tar -xzf tvmod-0.6.0-linux-x64.tar.gz
 cd tvmod-0.2.0-linux-x64
 ./tvmod install
 ```
@@ -47,7 +48,7 @@ Then close TradingView and start it from your normal icon. The release binary do
 To verify the GitHub build provenance:
 
 ```sh
-gh attestation verify tvmod-0.5.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.6.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 ## Install from source
@@ -191,6 +192,18 @@ Reload the TradingView page and enable **Hello World** in the gear modal. It dem
 
 External plugins are embedded into the installed preload at install/add/refresh time. For a patched install, run `tvmod repair --yes` after changing plugins.
 
+## Snap
+
+TVMod detects the official Snap launcher and places the preload under `~/snap/tradingview/common/tvmod/` so a confined app can read it. Snap installs use the launcher backend only; the Snap mount is read-only.
+
+Snap support is **experimental** until validated on a confined snapd host. Run the probe and report the log:
+
+```sh
+./tools/snap/probe.sh
+```
+
+See [docs/SNAP.md](docs/SNAP.md) for the expected output and failure modes.
+
 ## Compatibility census
 
 The census captures the public TradingView chart page (guest, no account) and compares it with `tools/census/baseline.json`:
@@ -274,6 +287,7 @@ src/lib/copy-app.ts    user-owned copy installer
 src/lib/asar-patch.ts  patch build, backup, elevated replacement
 src/lib/restart-prompt.ts running-instance prompt
 tools/census/          Playwright compatibility baseline/reporting
+tools/snap/            confined Snap probe script
 examples/plugins/      example external plugin
 test/                  unit tests for logic, boot filters, plugins, and ASAR patching
 docs/                  architecture, plugin SDK, and patch design
@@ -291,7 +305,8 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] One-command user-owned copy + patch installer
 - [x] Restart prompt for a running TradingView instance
 - [x] Root-owned in-place patching with explicit, minimal elevation
-- [ ] Snap validation (inspect binding and preload readability under confinement)
+- [x] Snap-aware paths, `snap run` launch, and a confinement probe
+- [ ] Snap validation on a confined snapd host (inspect binding and preload readability)
 - [ ] Signed release artifacts (GitHub attestations are present)
 - [x] Scheduled web compatibility census with issue reporting
 - [ ] Windows/macOS launcher

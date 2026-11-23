@@ -13,6 +13,10 @@ import {
   withPluginSetting,
 } from '../src/core/config.js';
 import { inferFlavor } from '../src/lib/app-detect.js';
+import {
+  preloadTargetForFlavor,
+  snapPreloadTarget,
+} from '../src/lib/paths.js';
 import { parseInspectorUrl, quoteDesktopArg } from '../src/lib/util.js';
 
 test('parseInspectorUrl extracts the websocket url', () => {
@@ -112,6 +116,15 @@ test('inferFlavor recognizes the Linux install layouts', () => {
   assert.equal(inferFlavor('/opt/TradingView/tradingview'), 'tarball');
   assert.equal(inferFlavor('/snap/tradingview/current/tradingview'), 'snap');
   assert.equal(inferFlavor('/home/user/TradingView/tradingview'), 'custom');
+});
+
+test('Snap installs use the Snap user-common preload path', () => {
+  assert.equal(preloadTargetForFlavor('snap'), snapPreloadTarget);
+  assert.match(
+    snapPreloadTarget,
+    /\/snap\/tradingview\/common\/tvmod\/preload\.js$/
+  );
+  assert.notEqual(preloadTargetForFlavor('aur'), snapPreloadTarget);
 });
 
 test('quoteDesktopArg quotes the Exec field safely', () => {

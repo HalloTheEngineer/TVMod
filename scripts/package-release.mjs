@@ -29,6 +29,9 @@ fs.cpSync(path.join(root, 'docs'), path.join(stage, 'docs'), { recursive: true }
 fs.cpSync(path.join(root, 'examples'), path.join(stage, 'examples'), {
   recursive: true,
 });
+fs.cpSync(path.join(root, 'tools/snap'), path.join(stage, 'tools/snap'), {
+  recursive: true,
+});
 fs.copyFileSync(binary, path.join(stage, 'tvmod'));
 fs.copyFileSync(preload, path.join(stage, 'preload.cjs'));
 fs.chmodSync(path.join(stage, 'tvmod'), 0o755);
