@@ -24,6 +24,7 @@ export interface AppState {
     backupPath: string;
     appVersion: string | null;
     patchedAt: string;
+    system?: boolean;
   };
 }
 

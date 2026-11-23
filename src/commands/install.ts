@@ -33,6 +33,7 @@ export interface InstallOptions {
   patch?: boolean;
   force?: boolean;
   yes?: boolean;
+  system?: boolean;
 }
 
 export async function installCommand(options: InstallOptions): Promise<void> {
@@ -134,7 +135,11 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   }
 
   if (options.patch) {
-    await patchCommand({ app: install.exe, yes: true });
+    await patchCommand({
+      app: install.exe,
+      yes: true,
+      system: options.system,
+    });
   }
 
   if (install.flavor === 'snap') {

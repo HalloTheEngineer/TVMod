@@ -27,9 +27,9 @@ Usage:
   tvmod launch [options]
   tvmod doctor [--app <path>]
   tvmod uninstall [--purge]
-  tvmod patch [--app <path>] [--restart] --yes
-  tvmod repair [--app <path>] [--restart] --yes
-  tvmod unpatch [--app <path>] [--restart] --yes
+  tvmod patch [--app <path>] [--restart] [--system] --yes
+  tvmod repair [--app <path>] [--restart] [--system] --yes
+  tvmod unpatch [--app <path>] [--restart] [--system] --yes
   tvmod plugin add <dir> [--force]
   tvmod plugin list
   tvmod plugin remove <id> --yes
@@ -51,11 +51,13 @@ Install options:
   --app <path>            override the detected TradingView executable
   --copy                  copy TradingView to ~/.local/opt/tradingview first
   --patch                 patch the installed/copied app.asar (requires --yes)
+  --system                elevate only the app.asar replacement (sudo/pkexec)
   --force                 replace an existing user-owned copy
 
 Patch options:
   --app <path>            override the detected TradingView executable
   --restart               close TradingView before modifying app.asar
+  --system                elevate only the app.asar replacement (sudo/pkexec)
   --yes                   required confirmation for patch/repair/unpatch/plugin remove
 
 Plugin options:
@@ -89,6 +91,7 @@ async function run(): Promise<void> {
       yes: { type: 'boolean', default: false },
       copy: { type: 'boolean', default: false },
       patch: { type: 'boolean', default: false },
+      system: { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
@@ -123,6 +126,7 @@ async function run(): Promise<void> {
         patch: Boolean(values.patch),
         force: Boolean(values.force),
         yes: Boolean(values.yes),
+        system: Boolean(values.system),
       });
       return;
 
@@ -157,6 +161,7 @@ async function run(): Promise<void> {
         app,
         restart: Boolean(values.restart),
         yes: Boolean(values.yes),
+        system: Boolean(values.system),
       });
       return;
 
@@ -165,6 +170,7 @@ async function run(): Promise<void> {
         app,
         restart: Boolean(values.restart),
         yes: Boolean(values.yes),
+        system: Boolean(values.system),
       });
       return;
 
@@ -173,6 +179,7 @@ async function run(): Promise<void> {
         app,
         restart: Boolean(values.restart),
         yes: Boolean(values.yes),
+        system: Boolean(values.system),
       });
       return;
 

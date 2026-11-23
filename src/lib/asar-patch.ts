@@ -1,4 +1,5 @@
 import * as asar from '@electron/asar';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -124,6 +125,42 @@ export async function buildPatchedAsar(
     fs.rmSync(tempDir, { recursive: true, force: true });
     throw error;
   }
+}
+
+export function installAsarElevated(
+  sourceAsar: string,
+  targetAsar: string
+): void {
+  if ((process.getuid?.() ?? -1) === 0) {
+    installAsar(sourceAsar, targetAsar);
+    return;
+  }
+
+  const targetDir = path.dirname(targetAsar);
+  const tempTarget = path.join(
+    targetDir,
+    `.app.asar.tvmod-elevated-${process.pid}-${Date.now()}.tmp`
+  );
+
+  const script = [
+    '/usr/bin/install -m 0644 "$1" "$2" || { /usr/bin/rm -f "$2"; exit 1; }',
+    '/usr/bin/mv -f "$2" "$3" || exit 1',
+  ].join('\n');
+
+  const args = ['/bin/sh', '-c', script, 'sh', sourceAsar, tempTarget, targetAsar];
+
+  let result = spawnSync('sudo', args, { stdio: 'inherit' });
+  if (result.error || result.status !== 0) {
+    result = spawnSync('pkexec', args, { stdio: 'inherit' });
+  }
+
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      'elevation failed; app.asar was not replaced. Install sudo or pkexec and try again.'
+    );
+  }
+
+  asar.uncacheAll();
 }
 
 export function installAsar(sourceAsar: string, targetAsar: string): void {

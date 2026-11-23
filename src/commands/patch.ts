@@ -7,6 +7,7 @@ import {
   buildPatchedAsar,
   cleanupPatchedBuild,
   installAsar,
+  installAsarElevated,
   isAsarPatched,
   restoreAsar,
 } from '../lib/asar-patch.js';
@@ -29,6 +30,7 @@ export interface PatchOptions {
   app?: string;
   restart?: boolean;
   yes?: boolean;
+  system?: boolean;
 }
 
 function requireInstalled(): AppState {
@@ -58,16 +60,16 @@ function requirePatchableInstall(
   return install;
 }
 
-function requireWritable(install: AppInstall): void {
+function requireWritable(install: AppInstall, system = false): void {
   if (!install.asar) throw new UserError('app.asar was not found.');
+  if (system) return;
+
   try {
     fs.accessSync(path.dirname(install.asar), fs.constants.W_OK);
   } catch {
     throw new UserError(
       `app.asar is not user-writable:\n  ${install.asar}\n\n` +
-        'This build only supports user-owned installs or copies. ' +
-        'Use the launcher backend, or install TradingView into a user-owned directory ' +
-        'and run "tvmod install --app <path>" against that copy.'
+        'Use "--copy --patch" for a user-owned copy, or "--system" to elevate only the app.asar replacement.'
     );
   }
 }
@@ -107,7 +109,8 @@ function preloadForPatch(state: AppState): string {
 
 async function applyPatch(
   state: AppState,
-  install: AppInstall
+  install: AppInstall,
+  system = false
 ): Promise<{ changed: boolean; hash: string }> {
   if (!install.asar) throw new UserError('app.asar was not found.');
 
@@ -132,7 +135,11 @@ async function applyPatch(
   const build = await buildPatchedAsar(install.asar, preload);
 
   try {
-    installAsar(build.tempAsar, install.asar);
+    if (system) {
+      installAsarElevated(build.tempAsar, install.asar);
+    } else {
+      installAsar(build.tempAsar, install.asar);
+    }
   } finally {
     cleanupPatchedBuild(build);
   }
@@ -148,6 +155,7 @@ async function applyPatch(
     backupPath: backup.backupPath,
     appVersion: install.version,
     patchedAt: new Date().toISOString(),
+    ...(system ? { system: true } : {}),
   };
   state.app.version = install.version;
   writeState(state);
@@ -164,21 +172,24 @@ export async function patchCommand(options: PatchOptions): Promise<void> {
 
   const state = requireInstalled();
   const install = requirePatchableInstall(state, options.app);
-  requireWritable(install);
+  requireWritable(install, options.system);
   await ensureStopped(install, options.restart);
 
-  const result = await applyPatch(state, install);
+  const result = await applyPatch(state, install, options.system);
 
   heading(`TVMod ${TVMOD_VERSION} patch`);
   label('TradingView', install.version ?? 'unknown');
   label('app.asar', install.asar ?? 'unknown');
   label('backup', displayPath(state.patch?.backupPath ?? ''));
   label('patched hash', result.hash.slice(0, 16));
+  if (options.system) label('elevation', 'sudo/pkexec for app.asar only');
 
   if (result.changed) {
     ok('app.asar patched. Start TradingView normally; the preload is embedded.');
     warn('All launchers for this install now start the patched app.');
-    warn('Run "tvmod unpatch --yes" to restore the backup.');
+    warn(
+      `Run "tvmod unpatch ${options.system ? '--system ' : ''}--yes" to restore the backup.`
+    );
   } else {
     ok('this install is already patched.');
   }
@@ -198,7 +209,7 @@ export async function repairCommand(options: PatchOptions): Promise<void> {
 
   const install = requirePatchableInstall(state, options.app);
   if (!install.asar) throw new UserError('app.asar was not found.');
-  requireWritable(install);
+  requireWritable(install, options.system);
 
   const currentHash = sha256File(install.asar);
   if (currentHash === state.patch.patchedHash) {
@@ -207,13 +218,14 @@ export async function repairCommand(options: PatchOptions): Promise<void> {
   }
 
   await ensureStopped(install, options.restart);
-  const result = await applyPatch(state, install);
+  const result = await applyPatch(state, install, options.system);
 
   heading(`TVMod ${TVMOD_VERSION} repair`);
   label('TradingView', install.version ?? 'unknown');
   label('app.asar', install.asar);
   label('backup', displayPath(state.patch?.backupPath ?? ''));
   label('patched hash', result.hash.slice(0, 16));
+  if (options.system) label('elevation', 'sudo/pkexec for app.asar only');
   ok('patch refreshed.');
 }
 
@@ -232,7 +244,7 @@ export async function unpatchCommand(options: PatchOptions): Promise<void> {
 
   const install = requirePatchableInstall(state, options.app);
   if (!install.asar) throw new UserError('app.asar was not found.');
-  requireWritable(install);
+  requireWritable(install, options.system);
   await ensureStopped(install, options.restart);
 
   const currentHash = sha256File(install.asar);
@@ -261,7 +273,11 @@ export async function unpatchCommand(options: PatchOptions): Promise<void> {
     throw new UserError('the ASAR backup failed its hash check; refusing to restore it.');
   }
 
-  restoreAsar(state.patch.backupPath, install.asar);
+  if (options.system) {
+    installAsarElevated(state.patch.backupPath, install.asar);
+  } else {
+    restoreAsar(state.patch.backupPath, install.asar);
+  }
 
   if (sha256File(install.asar) !== state.patch.originalHash) {
     throw new UserError('the restored ASAR does not match the recorded original hash.');
@@ -272,5 +288,6 @@ export async function unpatchCommand(options: PatchOptions): Promise<void> {
 
   heading(`TVMod ${TVMOD_VERSION} unpatch`);
   label('app.asar', install.asar);
+  if (options.system) label('elevation', 'sudo/pkexec for app.asar only');
   ok('original app.asar restored.');
 }

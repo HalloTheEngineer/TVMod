@@ -119,6 +119,10 @@ The optional patch backend uses the same preload bundle, but embeds it into the 
 
 No elevation is used. The copy uses the same TradingView profile, so a running original instance must be closed before launching the copy. Updates to the copy are manual.
 
+## Root-owned in-place patch
+
+`tvmod patch --system --yes` builds and verifies the patched ASAR and backup as the user, then runs a fixed `sudo`/`pkexec` command that installs the new ASAR to a root-owned target directory and renames it atomically. Only that file replacement is elevated. State and backups remain user-owned. The app must be stopped first (`--restart` is explicit).
+
 ## Running-instance prompt
 
 Before launching, `tvmod launch` checks for any running TradingView process when no development `--user-data-dir` is supplied. If one exists:

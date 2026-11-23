@@ -17,7 +17,7 @@ Anyone who can attach to the inspector during the bootstrap window can execute c
 
 ## Mods and remote code
 
-The v0.4.0 core is bundled into the preload. It does not load remote code or a remote plugin registry. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh` time.
+The v0.5.0 core is bundled into the preload. It does not load remote code or a remote plugin registry. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh` time.
 
 Plugin code runs in the renderer preload context through a capability context. It does not receive Node.js, Electron IPC, or TVMod's main-process APIs. The test probe confirms `require`, `process`, `globalThis.require`, and `globalThis.process` are unavailable inside a plugin. Plugins can still use page APIs such as `fetch`, `WebSocket`, and direct DOM access, so treat third-party plugins as trusted local code and review them before installing.
 
@@ -33,10 +33,12 @@ No remote registry, auto-update, or dynamic download exists in v1. A future regi
 
 Patch mode modifies `app.asar` after explicit `--yes` confirmation:
 
-- it refuses Snap and non-writable installs in v0.4.0;
+- it refuses Snap installs;
 - it creates and verifies a backup before replacing the ASAR;
 - `unpatch` only restores a backup when the current ASAR still matches the recorded patched hash;
 - the patched ASAR contains only TVMod code, no TradingView redistribution.
+
+For a root-owned install, `--system` elevates only the final `app.asar` installation with `sudo` or `pkexec`. The patch is built, backed up, and recorded in user space; the elevated command is a fixed `install` + `mv` shell sequence with paths passed as argv, not a string built from user input. Review the printed target before approving the password/GUI prompt.
 
 Run patch mode against a trusted user-owned copy. A malicious local process able to replace `app.asar` can run code with the user’s privileges, just like any other application update.
 
@@ -46,4 +48,4 @@ TVMod intentionally does not touch paywall, trial, entitlement, account, or cred
 
 ## Releases
 
-Release artifacts should be checksummed and signed. The v0.4.0 CI workflow publishes unsigned artifacts; treat them as development builds.
+Release artifacts should be checksummed and signed. The v0.5.0 CI workflow publishes unsigned artifacts; treat them as development builds.
