@@ -56,7 +56,7 @@ export function doctorCommand(options: DoctorOptions): void {
   }
 
   label('wrapper', fs.existsSync(wrapperPath) ? displayPath(wrapperPath) : 'missing');
-  label('desktop', fs.existsSync(desktopFile) ? displayPath(desktopFile) : 'missing');
+  label('launcher', fs.existsSync(desktopFile) ? displayPath(desktopFile) : 'missing');
   label('launch log', displayPath(launchLog));
 
   const pluginScan = readInstalledPlugins();
@@ -87,5 +87,14 @@ export function doctorCommand(options: DoctorOptions): void {
     label('snap preload', displayPath(snapPreloadTarget));
     warn('Snap support is experimental; validate inspector binding and preload reads under confinement.');
     warn('Run tools/snap/probe.sh on this Snap host.');
+  }
+
+  if (install.flavor === 'msix') {
+    warn('Microsoft Store MSIX installs cannot be launched with the inspector or patched.');
+    warn('Use a legacy standalone Windows build, or run TVMod on Linux/macOS.');
+  } else if (install.flavor === 'macos') {
+    warn('macOS support is experimental; report launch/install results.');
+  } else if (install.flavor === 'windows') {
+    warn('Windows standalone support is experimental; report launch/install results.');
   }
 }

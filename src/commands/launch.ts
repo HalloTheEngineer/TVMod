@@ -10,7 +10,11 @@ import {
   buildReloadScript,
 } from '../lib/bootstrap.js';
 import { CdpClient, waitForMainProcess, waitForPreload } from '../lib/cdp.js';
-import { findInstall, type AppInstall } from '../lib/app-detect.js';
+import {
+  findInstall,
+  installRoot,
+  type AppInstall,
+} from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
 import {
   controlFile,
@@ -199,10 +203,25 @@ async function ensureClosedForLaunch(options: LaunchOptions): Promise<void> {
   throw new UserError('restart cancelled');
 }
 
+function assertLaunchable(install: AppInstall): void {
+  if (install.flavor !== 'msix') return;
+  throw new UserError(
+    [
+      'TradingView is installed as a Microsoft Store MSIX package.',
+      'MSIX builds require package identity, and Windows filters the inspector flags TVMod needs.',
+      'The launcher and patch backends cannot attach to this package.',
+      '',
+      'Use a legacy standalone Windows build if available, run TradingView on Linux, or use the web chart with your browser.',
+      'See docs/PLATFORMS.md for the current platform support matrix.',
+    ].join('\n')
+  );
+}
+
 async function launchPatched(
   install: AppInstall,
   options: LaunchOptions
 ): Promise<void> {
+  assertLaunchable(install);
   await ensureClosedForLaunch(options);
 
   ensureDir(logsDir);
@@ -222,7 +241,7 @@ async function launchPatched(
       cwd:
         install.flavor === 'snap'
           ? process.env.HOME
-          : path.dirname(install.realExe),
+          : installRoot(install),
       detached: true,
       stdio: ['ignore', fd, fd],
       env: { ...process.env, TVMOD: '1' },
@@ -259,6 +278,8 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
       `TradingView was not found at ${options.app ?? state.app.exe}. Reinstall or pass --app.`
     );
   }
+
+  assertLaunchable(install);
 
   if (state.patch && install.asar) {
     let currentHash: string | null = null;
@@ -303,15 +324,19 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
   ];
   let child: ChildProcess;
   try {
-    child = spawn(install.command, [...install.baseArgs, ...args, ...(options.extraArgs ?? [])], {
-      cwd:
-        install.flavor === 'snap'
-          ? process.env.HOME
-          : path.dirname(install.realExe),
-      detached: true,
-      stdio: ['ignore', fd, fd],
-      env: { ...process.env, TVMOD: '1' },
-    });
+    child = spawn(
+      install.command,
+      [...install.baseArgs, ...args, ...(options.extraArgs ?? [])],
+      {
+        cwd:
+          install.flavor === 'snap'
+            ? process.env.HOME
+            : installRoot(install),
+        detached: true,
+        stdio: ['ignore', fd, fd],
+        env: { ...process.env, TVMOD: '1' },
+      }
+    );
   } catch (error) {
     fs.closeSync(fd);
     throw new UserError(`failed to start TradingView: ${errorMessage(error)}`);

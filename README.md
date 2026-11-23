@@ -1,10 +1,10 @@
 # tvmod
 
-Local mods for **TradingView Desktop** on Linux.
+Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and legacy standalone Windows builds are experimental. Microsoft Store MSIX builds are detected but not supported.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.8.0, launcher + patched-copy/in-place installer + signed plugin registry with an in-app browser + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host.
+> Status: **v0.9.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with an in-app browser + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
@@ -19,53 +19,80 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Plugin hot reload** — launcher mode reloads TradingView pages automatically after plugin install/remove/refresh.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
-- **One-command patched copy** — `tvmod install --copy --patch --yes` copies TradingView into `~/.local/opt/tradingview` and patches it without root.
-- **In-place system patch** — `tvmod patch --system --yes` runs sudo/pkexec only for the `app.asar` replacement; backups and state stay user-owned.
-- **Restart prompt** — clicking the icon while TradingView is open offers to close and relaunch it (Zenity/KDialog or a terminal prompt).
+- **One-command patched copy** — `tvmod install --copy --patch --yes` copies TradingView into a user-owned app-data folder and patches it without root.
+- **In-place system patch** — `tvmod patch --system --yes` elevates only the `app.asar` replacement (sudo/pkexec, macOS administrator prompt, or Windows UAC); backups and state stay user-owned.
+- **Restart prompt** — clicking the icon while TradingView is open offers to close and relaunch it (Zenity/KDialog, macOS dialog, Windows message box, or a terminal prompt).
 - **Compatibility census** — a weekly Playwright census of the public chart page detects missing `data-name` selectors and boot/global APIs, with a committed baseline.
 - **Signed releases** — release tarballs and checksums are signed with Sigstore keyless signing and carry GitHub provenance.
 - **Snap-aware launcher** — detects `/snap/bin/tradingview`, uses `snap run`, and keeps the preload in `~/snap/tradingview/common/tvmod/`.
-- **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
+- **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” entry is created too.
+- **Cross-platform builds** — Linux, macOS, and Windows standalone release artifacts are cross-built in CI, checksummed, and Sigstore-signed. See [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ## Requirements
 
-- Linux x64
+| Platform | Status | Notes |
+| --- | --- | --- |
+| Linux x64 | **Tested** | AUR/tarball; Snap experimental |
+| Linux arm64 | Built, untested | Cross-built release |
+| macOS arm64/x64 | **Experimental** | Unsigned binary; launcher and patch unverified on hardware |
+| Windows x64 standalone | **Experimental** | Legacy unpacked build only |
+| Windows x64 MSIX | **Unsupported** | Store package; inspector flags are filtered |
+
 - **Release artifact:** no Node.js required; the launcher is a self-contained Bun binary.
 - **Source build:** Node.js 22 or newer plus Bun 1.3.8 for the standalone binary.
-- TradingView Desktop installed and launched at least once
+- TradingView Desktop installed and launched at least once.
 
-Tested with the `tradingview 3.5.0-1` AUR package on CachyOS/Arch. The app layout is detected at install time (`/usr/lib/tradingview`, `/opt/TradingView`, or a custom `--app` path).
+Tested with the `tradingview 3.5.0-1` AUR package on CachyOS/Arch. The app layout is detected at install time. See [docs/PLATFORMS.md](docs/PLATFORMS.md) for per-platform paths and limitations.
 
 ## Install from a release
 
-Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Releases page, then run:
+Download the archive for your platform and `SHA256SUMS` from the GitHub Releases page.
+
+**Linux:**
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf tvmod-0.8.0-linux-x64.tar.gz
-cd tvmod-0.2.0-linux-x64
+tar -xzf tvmod-<version>-linux-x64.tar.gz
+cd tvmod-<version>-linux-x64
 ./tvmod install
 ```
 
-Then close TradingView and start it from your normal icon. The release binary does not need Node.js.
+**macOS (experimental):**
+
+```sh
+tar -xzf tvmod-<version>-darwin-arm64.tar.gz   # or darwin-x64
+cd tvmod-<version>-darwin-arm64
+xattr -dr com.apple.quarantine ./tvmod
+./tvmod install
+```
+
+**Windows standalone (experimental):**
+
+```bat
+Expand-Archive tvmod-<version>-windows-x64.zip -DestinationPath .
+cd tvmod-<version>-windows-x64
+.\tvmod.exe install
+```
+
+Then close TradingView and start it from the TVMod launcher. The release binary does not need Node.js.
 
 To verify the GitHub build provenance:
 
 ```sh
-gh attestation verify tvmod-0.8.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-<version>-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
-To verify the Sigstore signature, download the `.sigstore.json` assets and run:
+To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 
 ```sh
 cosign verify-blob \
-  --bundle tvmod-0.8.0-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.6.1 \
+  --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.9.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  tvmod-0.8.0-linux-x64.tar.gz
+  tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.6.1` verifies both signatures and the checksum.
+The repo helper `tools/verify-release.sh 0.9.0` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -74,14 +101,14 @@ git clone https://github.com/HalloTheEngineer/TVMod.git
 cd TVMod
 npm install
 npm run build
-npm run build:binary   # optional standalone Linux binary
+npm run build:binary   # host-platform standalone binary
 ./bin/tvmod install
 ```
 
 Then:
 
 1. Close any running TradingView instance.
-2. Start TradingView from your normal icon (the user-level desktop entry is named `tradingview.desktop`).
+2. Start TradingView from the TVMod launcher. On Linux that is the `TradingView` desktop entry; on macOS it is `~/Applications/TradingView (TVMod).command`; on Windows it is the `TradingView (TVMod)` Start Menu shortcut.
 3. Click the TVMod gear button at the bottom-right of the chart, or press `Ctrl+Shift+M`.
 
 The first launch attaches an inspector to the Electron main process, prepends the preload to the default session, verifies that it is active, and closes the inspector again.
@@ -93,15 +120,15 @@ tvmod launch              # errors if TradingView is already running
 tvmod launch --restart    # closes TradingView first
 ```
 
-The CLI and desktop wrapper are installed at `~/.local/bin/tvmod` and `~/.local/share/tvmod/preload.js`.
+The CLI wrapper is installed at `~/.local/bin/tvmod` on Linux/macOS and `%LOCALAPPDATA%\tvmod\bin\tvmod.cmd` on Windows. The preload lives in the platform data directory shown by `tvmod doctor`.
 
 ## Commands
 
 ```text
-tvmod install [options]          install the launcher, preload, and desktop entries
+tvmod install [options]          install the launcher, preload, and shortcuts
 tvmod launch [options]           attach TVMod to the app
 tvmod doctor [--app <path>]      show paths, versions, state, and running PIDs
-tvmod uninstall [--purge]        remove the desktop entries, wrapper, and state
+tvmod uninstall [--purge]        remove the launcher entries, wrapper, and state
 tvmod patch --yes                embed the preload into a user-writable app.asar
 tvmod repair --yes               re-apply the patch after an app update
 tvmod unpatch --yes              restore the original app.asar
@@ -300,7 +327,7 @@ In patch mode, the same preload bundle is appended to `preload/target-tvd-host-p
 - No paywall, trial, entitlement, or account data is touched. Paywall/trial feature flags are intentionally left alone.
 - Promo suppression may conflict with TradingView’s terms of service. Use at your own discretion.
 - The launcher briefly opens a loopback inspector. It binds to `127.0.0.1` on a random port, verifies the spawned PID, and closes the inspector after bootstrap.
-- Patch mode modifies `app.asar` after confirmation, keeps a verified backup, and refuses non-writable or Snap installs.
+- Patch mode modifies `app.asar` after confirmation, keeps a verified backup, and refuses non-writable, Snap, and MSIX installs.
 - No telemetry, analytics, or remote code loading.
 - Do not redistribute TradingView binaries, bundles, or assets. The patch backend never publishes a patched app.
 
@@ -310,8 +337,10 @@ See [SECURITY.md](SECURITY.md) and [docs/PATCHING.md](docs/PATCHING.md).
 
 ```sh
 npm run build          # dist/cli.mjs + dist/preload.cjs
-npm run build:binary   # dist/tvmod standalone Linux binary
-npm run package:release # release/tvmod-<version>-linux-x64.tar.gz
+npm run build:binary   # host-platform standalone binary
+npm run package:release # release/tvmod-<version>-<target>.*
+TVMOD_TARGET=windows-x64 npm run build:binary
+TVMOD_TARGET=windows-x64 npm run package:release
 npm run typecheck
 npm test
 ```
@@ -331,6 +360,8 @@ src/lib/control.ts      launcher hot-reload control client
 src/commands/plugin-dist.ts pack/sign/registry/install commands
 src/lib/copy-app.ts    user-owned copy installer
 src/lib/asar-patch.ts  patch build, backup, elevated replacement
+scripts/targets.mjs    cross-build target matrix
+docs/PLATFORMS.md      support matrix and per-platform paths
 src/lib/restart-prompt.ts running-instance prompt
 tools/census/          Playwright compatibility baseline/reporting
 tools/snap/            confined Snap probe script
@@ -357,7 +388,10 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Sigstore keyless release signing and GitHub provenance
 - [x] Ed25519-signed plugin registry, in-app registry browser, and hot page reload
 - [x] Scheduled web compatibility census with issue reporting
-- [ ] Windows/macOS launcher
+- [x] Cross-platform builds and best-effort macOS launcher
+- [x] Windows standalone detection/launcher with MSIX detection and a clear unsupported error
+- [ ] macOS launcher/patch validation on real hardware
+- [ ] Windows MSIX support (blocked by package identity and filtered inspector flags)
 
 ## License
 

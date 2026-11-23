@@ -57,11 +57,17 @@ export function errorMessage(error: unknown): string {
 }
 
 export function notify(summary: string, body: string): void {
-  if (process.platform !== 'linux') return;
   try {
-    spawnSync('notify-send', ['--app-name=TVMod', summary, body], {
-      stdio: 'ignore',
-    });
+    if (process.platform === 'linux') {
+      spawnSync('notify-send', ['--app-name=TVMod', summary, body], {
+        stdio: 'ignore',
+      });
+    } else if (process.platform === 'darwin') {
+      const script = `display notification ${JSON.stringify(
+        body
+      )} with title ${JSON.stringify(summary)}`;
+      spawnSync('osascript', ['-e', script], { stdio: 'ignore' });
+    }
   } catch {
     // Notifications are best-effort.
   }

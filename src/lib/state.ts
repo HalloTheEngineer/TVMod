@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import type { InstallFlavor } from './app-detect.js';
 import { ensureDir, stateFile } from './paths.js';
 
@@ -42,7 +43,7 @@ export function readState(): AppState | null {
 }
 
 export function writeState(state: AppState): void {
-  ensureDir(stateFile.replace(/\/[^/]+$/, ''));
+  ensureDir(path.dirname(stateFile));
   const temp = `${stateFile}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, {
     mode: 0o644,

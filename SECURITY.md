@@ -17,7 +17,7 @@ Anyone who can attach to the inspector during the bootstrap window can execute c
 
 ## Mods and remote code
 
-The v0.8.0 core is bundled into the preload. It does not load remote code automatically. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh`/`install` time; explicitly added signed registries are only fetched and installed on user command.
+The v0.9.0 core is bundled into the preload. It does not load remote code automatically. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh`/`install` time; explicitly added signed registries are only fetched and installed on user command.
 
 Plugin code runs in the renderer preload context through a capability context. It does not receive Node.js, Electron IPC, or TVMod's main-process APIs. The test probe confirms `require`, `process`, `globalThis.require`, and `globalThis.process` are unavailable inside a plugin. Plugins can still use page APIs such as `fetch`, `WebSocket`, and direct DOM access, so treat third-party plugins as trusted local code and review them before installing.
 
@@ -27,9 +27,17 @@ Capabilities are declared in the manifest:
 - `style` — inject/remove frame CSS
 - `storage` — namespaced JSON local storage
 
-A signed plugin registry is available in v0.8.0. Registry indexes and bundles are Ed25519-signed, bundles are SHA-256 checked, and the registry public key is pinned when the registry is added. There is no default registry, auto-update, or revocation. Registry installation still runs local plugin code; review publishers and plugins.
+A signed plugin registry is available in v0.9.0. Registry indexes and bundles are Ed25519-signed, bundles are SHA-256 checked, and the registry public key is pinned when the registry is added. There is no default registry, auto-update, or revocation. Registry installation still runs local plugin code; review publishers and plugins.
 
 The in-app Registry tab uses an IPC bridge to the CLI. Plugin ids and registry names are validated before `execFile` runs, no shell is used, and installs still go through signature, checksum, id, and version verification. The bridge exists only in launcher mode.
+
+## Platform trust boundaries
+
+Linux is the tested platform. macOS and legacy Windows standalone releases are experimental and unsigned. Release archives are Sigstore-signed and carry GitHub provenance, but the OS may still warn when running the extracted binary (Gatekeeper or SmartScreen).
+
+Microsoft Store MSIX builds are detected but rejected. They use package identity, filter inspector flags, and live in a read-only protected directory, so TVMod neither launches nor patches them.
+
+Windows elevated patching creates a temporary PowerShell script and runs it with `Start-Process -Verb RunAs`. macOS uses `osascript ... with administrator privileges`. Both operate only on the `app.asar` replacement and keep backups in user-owned data directories.
 
 ## Hot reload control endpoint
 

@@ -185,7 +185,7 @@ export class PluginHost {
       app: {
         version: this.version,
         host: 'desktop',
-        platform: 'linux',
+        platform: process.platform,
       },
       log: (...args: unknown[]) => {
         console.log(`[tvmod:${id}]`, ...args);

@@ -1,6 +1,6 @@
 # Plugin registry
 
-TVMod v0.8.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry installs, and automatic page reload after plugin changes in launcher mode.
+TVMod v0.9.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry installs, and automatic page reload after plugin changes in launcher mode.
 
 There is no default registry and no remote code is loaded automatically. You add a registry by pinning its public key.
 

@@ -2,49 +2,180 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const home = os.homedir();
-
-function xdg(envName: string, fallback: string): string {
-  const value = process.env[envName];
-  return value && value.trim() ? path.resolve(value) : path.join(home, fallback);
+export interface PlatformPaths {
+  configDir: string;
+  dataDir: string;
+  stateDir: string;
+  logsDir: string;
+  launchLog: string;
+  stateFile: string;
+  controlFile: string;
+  registriesFile: string;
+  preloadTarget: string;
+  snapPreloadTarget: string;
+  backupsDir: string;
+  pluginsDir: string;
+  copiedAppDir: string;
+  localBinDir: string;
+  wrapperPath: string;
+  desktopDir: string;
+  desktopFile: string;
+  vanillaDesktopFile: string;
+  desktopBackupFile: string;
+  wrapperBackupFile: string;
 }
 
-export const configDir = path.join(xdg('XDG_CONFIG_HOME', '.config'), 'tvmod');
-export const dataDir = path.join(xdg('XDG_DATA_HOME', '.local/share'), 'tvmod');
-export const stateDir = path.join(xdg('XDG_STATE_HOME', '.local/state'), 'tvmod');
+function envDir(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: string
+): string {
+  const value = env[name];
+  return value && value.trim() ? path.resolve(value) : fallback;
+}
 
-export const logsDir = path.join(stateDir, 'logs');
-export const launchLog = path.join(logsDir, 'launch.log');
-export const stateFile = path.join(configDir, 'state.json');
-export const controlFile = path.join(stateDir, 'control.json');
-export const registriesFile = path.join(configDir, 'registries.json');
-export const preloadTarget = path.join(dataDir, 'preload.js');
-export const snapPreloadTarget = path.join(
-  home,
-  'snap',
-  'tradingview',
-  'common',
-  'tvmod',
-  'preload.js'
-);
-export const backupsDir = path.join(dataDir, 'backups');
-export const pluginsDir = path.join(dataDir, 'plugins');
-export const copiedAppDir = path.join(home, '.local', 'opt', 'tradingview');
+export function computePaths(
+  platform: NodeJS.Platform = process.platform,
+  home: string = os.homedir(),
+  env: NodeJS.ProcessEnv = process.env
+): PlatformPaths {
+  let configDir: string;
+  let dataDir: string;
+  let stateDir: string;
+  let logsDir: string;
+  let localBinDir: string;
+  let wrapperName: string;
+  let desktopDir: string;
+  let desktopName: string;
+  let vanillaName: string;
+  let copiedAppDir: string;
 
-export const localBinDir = path.join(home, '.local', 'bin');
-export const wrapperPath = path.join(localBinDir, 'tvmod');
+  if (platform === 'win32') {
+    const appData = envDir(
+      env,
+      'APPDATA',
+      path.join(home, 'AppData', 'Roaming')
+    );
+    const localAppData = envDir(
+      env,
+      'LOCALAPPDATA',
+      path.join(home, 'AppData', 'Local')
+    );
+    configDir = path.join(appData, 'tvmod');
+    dataDir = path.join(localAppData, 'tvmod');
+    stateDir = path.join(dataDir, 'state');
+    logsDir = path.join(stateDir, 'logs');
+    localBinDir = path.join(dataDir, 'bin');
+    wrapperName = 'tvmod.cmd';
+    desktopDir = path.join(
+      appData,
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs'
+    );
+    desktopName = 'TradingView (TVMod).lnk';
+    vanillaName = 'TradingView (Vanilla).lnk';
+    copiedAppDir = path.join(dataDir, 'apps', 'tradingview');
+  } else if (platform === 'darwin') {
+    const appSupport = path.join(
+      home,
+      'Library',
+      'Application Support',
+      'tvmod'
+    );
+    configDir = appSupport;
+    dataDir = appSupport;
+    stateDir = path.join(appSupport, 'state');
+    logsDir = path.join(home, 'Library', 'Logs', 'tvmod');
+    localBinDir = path.join(home, '.local', 'bin');
+    wrapperName = 'tvmod';
+    desktopDir = path.join(home, 'Applications');
+    desktopName = 'TradingView (TVMod).command';
+    vanillaName = 'TradingView (Vanilla).command';
+    copiedAppDir = path.join(appSupport, 'apps', 'TradingView.app');
+  } else {
+    configDir = path.join(
+      envDir(env, 'XDG_CONFIG_HOME', path.join(home, '.config')),
+      'tvmod'
+    );
+    dataDir = path.join(
+      envDir(env, 'XDG_DATA_HOME', path.join(home, '.local/share')),
+      'tvmod'
+    );
+    stateDir = path.join(
+      envDir(env, 'XDG_STATE_HOME', path.join(home, '.local/state')),
+      'tvmod'
+    );
+    logsDir = path.join(stateDir, 'logs');
+    localBinDir = path.join(home, '.local', 'bin');
+    wrapperName = 'tvmod';
+    desktopDir = path.join(
+      envDir(env, 'XDG_DATA_HOME', path.join(home, '.local/share')),
+      'applications'
+    );
+    desktopName = 'tradingview.desktop';
+    vanillaName = 'tradingview-vanilla.desktop';
+    copiedAppDir = path.join(home, '.local', 'opt', 'tradingview');
+  }
 
-export const desktopDir = path.join(
-  xdg('XDG_DATA_HOME', '.local/share'),
-  'applications'
-);
-export const desktopFile = path.join(desktopDir, 'tradingview.desktop');
-export const vanillaDesktopFile = path.join(
-  desktopDir,
-  'tradingview-vanilla.desktop'
-);
-export const desktopBackupFile = `${desktopFile}.tvmod-backup`;
-export const wrapperBackupFile = `${wrapperPath}.tvmod-backup`;
+  const stateFile = path.join(configDir, 'state.json');
+  const preloadTarget = path.join(dataDir, 'preload.js');
+  const wrapperPath = path.join(localBinDir, wrapperName);
+  const desktopFile = path.join(desktopDir, desktopName);
+
+  return {
+    configDir,
+    dataDir,
+    stateDir,
+    logsDir,
+    launchLog: path.join(logsDir, 'launch.log'),
+    stateFile,
+    controlFile: path.join(stateDir, 'control.json'),
+    registriesFile: path.join(configDir, 'registries.json'),
+    preloadTarget,
+    snapPreloadTarget: path.join(
+      home,
+      'snap',
+      'tradingview',
+      'common',
+      'tvmod',
+      'preload.js'
+    ),
+    backupsDir: path.join(dataDir, 'backups'),
+    pluginsDir: path.join(dataDir, 'plugins'),
+    copiedAppDir,
+    localBinDir,
+    wrapperPath,
+    desktopDir,
+    desktopFile,
+    vanillaDesktopFile: path.join(desktopDir, vanillaName),
+    desktopBackupFile: `${desktopFile}.tvmod-backup`,
+    wrapperBackupFile: `${wrapperPath}.tvmod-backup`,
+  };
+}
+
+export const paths = computePaths();
+export const configDir = paths.configDir;
+export const dataDir = paths.dataDir;
+export const stateDir = paths.stateDir;
+export const logsDir = paths.logsDir;
+export const launchLog = paths.launchLog;
+export const stateFile = paths.stateFile;
+export const controlFile = paths.controlFile;
+export const registriesFile = paths.registriesFile;
+export const preloadTarget = paths.preloadTarget;
+export const snapPreloadTarget = paths.snapPreloadTarget;
+export const backupsDir = paths.backupsDir;
+export const pluginsDir = paths.pluginsDir;
+export const copiedAppDir = paths.copiedAppDir;
+export const localBinDir = paths.localBinDir;
+export const wrapperPath = paths.wrapperPath;
+export const desktopDir = paths.desktopDir;
+export const desktopFile = paths.desktopFile;
+export const vanillaDesktopFile = paths.vanillaDesktopFile;
+export const desktopBackupFile = paths.desktopBackupFile;
+export const wrapperBackupFile = paths.wrapperBackupFile;
 
 export function preloadTargetForFlavor(flavor: string): string {
   return flavor === 'snap' ? snapPreloadTarget : preloadTarget;
@@ -70,6 +201,7 @@ export function preloadSourcePath(): string {
 }
 
 export function displayPath(filePath: string): string {
+  const home = os.homedir();
   const relative = path.relative(home, filePath);
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
     return filePath;

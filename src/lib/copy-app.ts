@@ -1,9 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { findInstall, type AppInstall } from './app-detect.js';
+import { findInstall, installRoot, type AppInstall } from './app-detect.js';
 import { UserError } from './errors.js';
 import { copiedAppDir, ensureDir } from './paths.js';
 import { pidsForInstall } from './proc.js';
+
+function copiedExecutable(install: AppInstall): string {
+  if (install.flavor === 'macos') {
+    return path.join(
+      copiedAppDir,
+      'Contents',
+      'MacOS',
+      path.basename(install.realExe)
+    );
+  }
+  return path.join(copiedAppDir, path.basename(install.realExe));
+}
 
 export function copyAppForPatch(
   install: AppInstall,
@@ -14,15 +26,19 @@ export function copyAppForPatch(
       'copying a confined Snap install is not supported. Use the launcher backend or install TradingView from a tarball/AUR package.'
     );
   }
+  if (install.flavor === 'msix') {
+    throw new UserError(
+      'copying an MSIX install is not supported. Microsoft Store builds use package identity and cannot be launched from a copy reliably.'
+    );
+  }
 
-  const sourceDir = path.dirname(install.realExe);
+  const sourceDir = installRoot(install);
   if (path.resolve(sourceDir) === path.resolve(copiedAppDir)) {
     throw new UserError('the detected install already is the user-owned TVMod copy.');
   }
 
   if (fs.existsSync(copiedAppDir)) {
-    const copyExe = path.join(copiedAppDir, path.basename(install.realExe));
-    if (pidsForInstall(copyExe).length > 0) {
+    if (pidsForInstall(copiedExecutable(install)).length > 0) {
       throw new UserError(
         'the copied TradingView instance is running. Close it before replacing the copy.'
       );
@@ -52,15 +68,17 @@ export function copyAppForPatch(
     );
   }
 
-  const exe = path.join(copiedAppDir, path.basename(install.realExe));
+  const exe = copiedExecutable(install);
   if (!fs.existsSync(exe)) {
     throw new UserError(`the copied app is missing its executable at ${exe}`);
   }
 
-  try {
-    fs.chmodSync(exe, 0o755);
-  } catch {
-    // The mode is usually preserved by cpSync; ignore if it is already executable.
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(exe, 0o755);
+    } catch {
+      // The mode is usually preserved by cpSync; ignore if it is already executable.
+    }
   }
 
   const copied = findInstall(exe);

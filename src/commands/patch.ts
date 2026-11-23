@@ -1,13 +1,19 @@
 import { TVMOD_VERSION } from '../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
-import { findInstall, type AppInstall } from '../lib/app-detect.js';
+import { spawnSync } from 'node:child_process';
+import {
+  findInstall,
+  installRoot,
+  type AppInstall,
+} from '../lib/app-detect.js';
 import {
   backupAsar,
   buildPatchedAsar,
   cleanupPatchedBuild,
   installAsar,
   installAsarElevated,
+  elevationLabel,
   isAsarPatched,
   restoreAsar,
 } from '../lib/asar-patch.js';
@@ -57,6 +63,11 @@ function requirePatchableInstall(
       'official Snap installs are read-only and cannot be patched. Use the launcher backend.'
     );
   }
+  if (install.flavor === 'msix') {
+    throw new UserError(
+      'Microsoft Store MSIX installs are read-only and cannot be patched or launched with the inspector. See docs/PLATFORMS.md.'
+    );
+  }
   return install;
 }
 
@@ -93,6 +104,26 @@ async function ensureStopped(
   terminatePids(pids);
   if (!(await waitForExit(pids))) {
     throw new UserError('TradingView did not exit. Close it manually and retry.');
+  }
+}
+
+function resignMacApp(install: AppInstall): void {
+  if (process.platform !== 'darwin') return;
+
+  const sign = spawnSync(
+    'codesign',
+    ['--force', '--deep', '--sign', '-', installRoot(install)],
+    { encoding: 'utf8' }
+  );
+  if (sign.error || sign.status !== 0) {
+    warn(
+      `could not ad-hoc re-sign the patched app: ${
+        sign.error?.message || sign.stderr?.trim() || 'codesign failed'
+      }`
+    );
+    warn('macOS may refuse to launch the patched app until it is re-signed.');
+  } else {
+    ok('patched app ad-hoc signed.');
   }
 }
 
@@ -182,9 +213,10 @@ export async function patchCommand(options: PatchOptions): Promise<void> {
   label('app.asar', install.asar ?? 'unknown');
   label('backup', displayPath(state.patch?.backupPath ?? ''));
   label('patched hash', result.hash.slice(0, 16));
-  if (options.system) label('elevation', 'sudo/pkexec for app.asar only');
+  if (options.system) label('elevation', elevationLabel());
 
   if (result.changed) {
+    resignMacApp(install);
     ok('app.asar patched. Start TradingView normally; the preload is embedded.');
     warn('All launchers for this install now start the patched app.');
     warn(
@@ -225,7 +257,8 @@ export async function repairCommand(options: PatchOptions): Promise<void> {
   label('app.asar', install.asar);
   label('backup', displayPath(state.patch?.backupPath ?? ''));
   label('patched hash', result.hash.slice(0, 16));
-  if (options.system) label('elevation', 'sudo/pkexec for app.asar only');
+  if (options.system) label('elevation', elevationLabel());
+  resignMacApp(install);
   ok('patch refreshed.');
 }
 
@@ -288,6 +321,6 @@ export async function unpatchCommand(options: PatchOptions): Promise<void> {
 
   heading(`TVMod ${TVMOD_VERSION} unpatch`);
   label('app.asar', install.asar);
-  if (options.system) label('elevation', 'sudo/pkexec for app.asar only');
+  if (options.system) label('elevation', elevationLabel());
   ok('original app.asar restored.');
 }

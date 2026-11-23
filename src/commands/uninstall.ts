@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import { removeDesktopEntries, removeWrapper } from '../lib/desktop.js';
 import { UserError } from '../lib/errors.js';
 import {
+  configDir,
   dataDir,
   displayPath,
   snapPreloadTarget,
+  stateDir,
   stateFile,
   wrapperPath,
 } from '../lib/paths.js';
@@ -30,14 +32,22 @@ export function uninstallCommand(options: UninstallOptions): void {
 
   if (options.purge) {
     fs.rmSync(dataDir, { recursive: true, force: true });
-    fs.rmSync(snapPreloadTarget.replace(/\/preload\.js$/, ''), {
-      recursive: true,
-      force: true,
-    });
+    if (fs.existsSync(configDir)) {
+      fs.rmSync(configDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(stateDir)) {
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+    if (process.platform === 'linux') {
+      fs.rmSync(snapPreloadTarget.replace(/\/preload\.js$/, ''), {
+        recursive: true,
+        force: true,
+      });
+    }
   }
 
   heading('TVMod uninstalled');
-  label('desktop entries', 'removed/restored');
+  label('launcher entries', 'removed/restored');
   label('wrapper', displayPath(wrapperPath));
   label('state', displayPath(stateFile));
 

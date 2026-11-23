@@ -51,7 +51,7 @@ Usage:
   tvmod plugin registry list
   tvmod plugin registry remove <name> --yes
   tvmod plugin registry sign <index.json> --key <private-key.pem>
-  tvmod plugin browse [query] [--registry <name>]
+  tvmod plugin browse [query] [--registry <name>] [--json]
   tvmod plugin install <id> [--registry <name>] [--force]
 
 Launch options:
@@ -66,16 +66,18 @@ Launch options:
   --verbose               print debug details
 
 Install options:
-  --app <path>            override the detected TradingView executable
-  --copy                  copy TradingView to ~/.local/opt/tradingview first
+  --app <path>            override the detected TradingView executable/app
+  --copy                  copy TradingView to a user-owned app-data folder first
   --patch                 patch the installed/copied app.asar (requires --yes)
-  --system                elevate only the app.asar replacement (sudo/pkexec)
+  --system                elevate only the app.asar replacement
+                          (sudo/pkexec, macOS administrator prompt, or Windows UAC)
   --force                 replace an existing user-owned copy
 
 Patch options:
-  --app <path>            override the detected TradingView executable
+  --app <path>            override the detected TradingView executable/app
   --restart               close TradingView before modifying app.asar
-  --system                elevate only the app.asar replacement (sudo/pkexec)
+  --system                elevate only the app.asar replacement
+                          (sudo/pkexec, macOS administrator prompt, or Windows UAC)
   --yes                   required confirmation for patch/repair/unpatch/plugin remove
 
 Plugin options:

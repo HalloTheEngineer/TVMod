@@ -11,8 +11,8 @@ permissions:
   attestations: write
 
 jobs:
-  release:
-    name: Build Linux x64 release
+  test:
+    name: Typecheck and test
     runs-on: ubuntu-24.04
 
     steps:
@@ -33,9 +33,74 @@ jobs:
       - run: npm run build
       - run: npm run build:binary
       - run: ./dist/tvmod --version
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: test
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - linux-x64
+          - linux-arm64
+          - darwin-x64
+          - darwin-arm64
+          - windows-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:binary
+        env:
+          TVMOD_TARGET: ${{ matrix.target }}
       - run: npm run package:release
+        env:
+          TVMOD_TARGET: ${{ matrix.target }}
       - run: sha256sum -c SHA256SUMS
         working-directory: release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tvmod-${{ matrix.target }}
+          path: |
+            release/*.tar.gz
+            release/*.zip
+            release/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    name: Sign and publish
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Combine checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) \
+            -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -44,29 +109,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TARBALL="$(ls release/*.tar.gz)"
-          cosign sign-blob --yes --bundle "${TARBALL}.sigstore.json" "${TARBALL}"
+          for artifact in release/*.tar.gz release/*.zip; do
+            [ -e "$artifact" ] || continue
+            cosign sign-blob --yes --bundle "${artifact}.sigstore.json" "$artifact"
+          done
           cosign sign-blob --yes --bundle release/SHA256SUMS.sigstore.json release/SHA256SUMS
 
       - name: Verify release signatures
         shell: bash
         run: |
           set -euo pipefail
-          TARBALL="$(ls release/*.tar.gz)"
           IDENTITY="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
           ISSUER="https://token.actions.githubusercontent.com"
-          cosign verify-blob --bundle "${TARBALL}.sigstore.json" --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" "${TARBALL}"
-          cosign verify-blob --bundle release/SHA256SUMS.sigstore.json --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" release/SHA256SUMS
+          for artifact in release/*.tar.gz release/*.zip; do
+            [ -e "$artifact" ] || continue
+            cosign verify-blob --bundle "${artifact}.sigstore.json" \
+              --certificate-identity "${IDENTITY}" \
+              --certificate-oidc-issuer "${ISSUER}" "$artifact"
+          done
+          cosign verify-blob --bundle release/SHA256SUMS.sigstore.json \
+            --certificate-identity "${IDENTITY}" \
+            --certificate-oidc-issuer "${ISSUER}" release/SHA256SUMS
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: release/*.tar.gz
+          subject-path: |
+            release/*.tar.gz
+            release/*.zip
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             release/*.tar.gz
+            release/*.zip
             release/SHA256SUMS
             release/*.sigstore.json
           generate_release_notes: true

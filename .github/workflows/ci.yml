@@ -68,3 +68,33 @@ jobs:
           name: tvmod-linux-x64
           path: release/
           if-no-files-found: error
+
+  cross-build:
+    name: Cross-build ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [darwin-arm64, windows-x64]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:binary
+        env:
+          TVMOD_TARGET: ${{ matrix.target }}
+      - run: npm run package:release
+        env:
+          TVMOD_TARGET: ${{ matrix.target }}
+      - run: ls -lh release

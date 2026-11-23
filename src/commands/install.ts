@@ -53,6 +53,17 @@ export async function installCommand(options: InstallOptions): Promise<void> {
     );
   }
 
+  if (install.flavor === 'msix') {
+    throw new UserError(
+      [
+        'TradingView is installed as a Microsoft Store MSIX package.',
+        'MSIX builds cannot be launched with the inspector flags or patched by TVMod.',
+        'Install a legacy standalone Windows build if available, or use TVMod on Linux/macOS.',
+        'See docs/PLATFORMS.md for the support matrix.',
+      ].join('\n')
+    );
+  }
+
   if (options.copy) {
     if (install.flavor === 'snap') {
       throw new UserError(
@@ -120,7 +131,7 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   label('app.asar', install.asar ?? 'not found (launcher only)');
   label('preload', displayPath(pluginResult.path));
   label('wrapper', displayPath(wrapperPath));
-  label('desktop', displayPath(entries.desktop));
+  label('launcher', displayPath(entries.desktop));
   label('external plugins', String(pluginResult.count));
   label('preload sha256', sha256File(pluginResult.path).slice(0, 16));
 
@@ -131,9 +142,17 @@ export async function installCommand(options: InstallOptions): Promise<void> {
   const pids = tradingViewPids();
   if (pids.length > 0) {
     warn(`TradingView is currently running (e.g. PID ${pids[0]}).`);
-    warn('Close it and start it again from the TradingView icon.');
+    warn('Close it and start it again from the TradingView launcher.');
   } else {
-    ok('Start TradingView from your normal icon; TVMod will attach on launch.');
+    ok('Start TradingView from your normal launcher; TVMod will attach on launch.');
+  }
+
+  if (process.platform === 'darwin') {
+    warn('macOS support is experimental and this build is unsigned.');
+    warn(`Add ${displayPath(wrapperPath.replace(/\/[^/]+$/, ''))} to PATH to use the tvmod command.`);
+  } else if (process.platform === 'win32') {
+    warn('Windows standalone support is experimental.');
+    warn('The Microsoft Store (MSIX) build is not supported.');
   }
 
   if (options.patch) {

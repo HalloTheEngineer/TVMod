@@ -95,6 +95,12 @@ In launcher mode, the main-process bootstrap starts a loopback HTTP server with 
 
 The main-process bootstrap also registers `tvmod:registry:list` and `tvmod:registry:install` IPC handlers. The preload exposes them to the isolated core only; the panel's Registry tab calls them to list configured registries and to run `plugin browse --json` / `plugin install`. The handlers validate plugin ids and registry names, use `execFile` without a shell, and return a structured result. They exist only in launcher mode, which is why patch installs still use the CLI.
 
+## Platform layers
+
+`src/lib/paths.ts` resolves native config/data/state/log locations and launcher paths for Linux, macOS, and Windows. `src/lib/app-detect.ts` inspects Linux executables, macOS `.app` bundles, Windows standalone directories, and Windows MSIX package locations. `src/lib/proc.ts` lists and terminates processes with `pgrep`/`ps`, `/proc`, or `tasklist`/`taskkill`. `src/lib/desktop.ts` writes Linux `.desktop` entries, macOS `.command` launchers, or Windows Start Menu shortcuts. `src/lib/asar-patch.ts` contains platform-specific elevation for Linux, macOS, and Windows.
+
+MSIX packages are represented as a separate flavor only so commands can fail with a clear explanation; there is no MSIX launch or patch backend. See [PLATFORMS.md](PLATFORMS.md).
+
 ## Desktop integration
 
 `tvmod install` writes:
@@ -122,7 +128,7 @@ The optional patch backend uses the same preload bundle, but embeds it into the 
 `tvmod install --copy --patch --yes` is the one-command path for a root-owned app:
 
 1. Copy the detected app directory to `~/.local/opt/tradingview`.
-2. Detect the copied executable and write state/desktop entries against it.
+2. Detect the copied executable and write state/launcher entries against it.
 3. Patch the copied ASAR with the same verified backup/repair path.
 
 No elevation is used. The copy uses the same TradingView profile, so a running original instance must be closed before launching the copy. Updates to the copy are manual.

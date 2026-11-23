@@ -127,6 +127,97 @@ export async function buildPatchedAsar(
   }
 }
 
+function posixQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function psQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+export function elevationLabel(): string {
+  if (process.platform === 'win32') return 'Windows UAC for app.asar only';
+  if (process.platform === 'darwin') {
+    return 'macOS administrator prompt for app.asar only';
+  }
+  return 'sudo/pkexec for app.asar only';
+}
+
+function installAsarElevatedMac(
+  sourceAsar: string,
+  targetAsar: string,
+  tempTarget: string
+): void {
+  const command = [
+    `/bin/cp ${posixQuote(sourceAsar)} ${posixQuote(tempTarget)}`,
+    `/bin/mv -f ${posixQuote(tempTarget)} ${posixQuote(targetAsar)}`,
+  ].join(' && ');
+
+  const appleScript = `do shell script ${JSON.stringify(
+    `${command} || { /bin/rm -f ${posixQuote(tempTarget)}; exit 1; }`
+  )} with administrator privileges`;
+
+  const result = spawnSync('osascript', ['-e', appleScript], {
+    stdio: 'inherit',
+  });
+
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      'macOS elevation failed; app.asar was not replaced. Approve the administrator prompt and try again.'
+    );
+  }
+}
+
+function installAsarElevatedWindows(
+  sourceAsar: string,
+  targetAsar: string,
+  tempTarget: string
+): void {
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    'try {',
+    `  Copy-Item -LiteralPath ${psQuote(sourceAsar)} -Destination ${psQuote(
+      tempTarget
+    )} -Force`,
+    `  Move-Item -LiteralPath ${psQuote(tempTarget)} -Destination ${psQuote(
+      targetAsar
+    )} -Force`,
+    '} catch {',
+    `  if (Test-Path -LiteralPath ${psQuote(tempTarget)}) { Remove-Item -Force -LiteralPath ${psQuote(
+      tempTarget
+    )} }`,
+    '  throw',
+    '}',
+  ].join('\r\n');
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tvmod-elevate-'));
+  const scriptPath = path.join(tempDir, 'install-asar.ps1');
+  fs.writeFileSync(scriptPath, script);
+
+  const command = [
+    '$p = Start-Process -Verb RunAs -Wait -PassThru -FilePath "powershell.exe"',
+    '-ArgumentList @("-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",' +
+      psQuote(scriptPath) +
+      '); exit $p.ExitCode',
+  ].join(' ');
+
+  try {
+    const result = spawnSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', command],
+      { stdio: 'inherit', windowsHide: true }
+    );
+
+    if (result.error || result.status !== 0) {
+      throw new Error(
+        'Windows elevation failed; app.asar was not replaced. Approve the UAC prompt and try again.'
+      );
+    }
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 export function installAsarElevated(
   sourceAsar: string,
   targetAsar: string
@@ -141,6 +232,18 @@ export function installAsarElevated(
     targetDir,
     `.app.asar.tvmod-elevated-${process.pid}-${Date.now()}.tmp`
   );
+
+  if (process.platform === 'darwin') {
+    installAsarElevatedMac(sourceAsar, targetAsar, tempTarget);
+    asar.uncacheAll();
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    installAsarElevatedWindows(sourceAsar, targetAsar, tempTarget);
+    asar.uncacheAll();
+    return;
+  }
 
   const script = [
     '/usr/bin/install -m 0644 "$1" "$2" || { /usr/bin/rm -f "$2"; exit 1; }',
