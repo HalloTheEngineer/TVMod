@@ -24,11 +24,13 @@
     "package:release": "node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "dev": "npm run build && node dist/cli.mjs"
+    "dev": "npm run build && node dist/cli.mjs",
+    "census": "node tools/census/collect.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
+    "playwright": "^1.65.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

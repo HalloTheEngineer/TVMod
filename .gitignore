@@ -5,3 +5,5 @@ tmp/
 .env
 *.log
 .DS_Store
+tools/census/report.md
+tools/census/report.json

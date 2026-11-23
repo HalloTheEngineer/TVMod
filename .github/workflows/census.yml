@@ -1,0 +1,113 @@
+name: Census
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: tvmod-census
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  census:
+    name: TradingView compatibility census
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run census
+        id: census
+        continue-on-error: true
+        run: npm run census
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: census-report
+          path: |
+            tools/census/report.md
+            tools/census/report.json
+          if-no-files-found: warn
+
+      - name: Open or update drift issue
+        if: steps.census.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const title = '[census] TradingView UI/config drift';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let report = 'The census job failed before producing a report.';
+            try {
+              report = fs.readFileSync('tools/census/report.md', 'utf8');
+            } catch {}
+            const body = `${report}\n\nWorkflow run: ${runUrl}`;
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = issues.data.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }
+
+      - name: Close recovered drift issue
+        if: steps.census.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '[census] TradingView UI/config drift';
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = issues.data.find((issue) => issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: 'The compatibility census is green again; closing this issue.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: 'closed',
+              });
+            }
+
+      - name: Fail the job on drift
+        if: steps.census.outcome == 'failure'
+        run: exit 1

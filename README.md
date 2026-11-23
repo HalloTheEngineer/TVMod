@@ -18,6 +18,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
 - **One-command patched copy** — `tvmod install --copy --patch --yes` copies TradingView into `~/.local/opt/tradingview` and patches it without root.
 - **Restart prompt** — clicking the icon while TradingView is open offers to close and relaunch it (Zenity/KDialog or a terminal prompt).
+- **Compatibility census** — a weekly Playwright census of the public chart page detects missing `data-name` selectors and boot/global APIs, with a committed baseline.
 - **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
 
 ## Requirements
@@ -179,6 +180,31 @@ Reload the TradingView page and enable **Hello World** in the gear modal. It dem
 
 External plugins are embedded into the installed preload at install/add/refresh time. For a patched install, run `tvmod repair --yes` after changing plugins.
 
+## Compatibility census
+
+The census captures the public TradingView chart page (guest, no account) and compares it with `tools/census/baseline.json`:
+
+- `data-name` selectors used by the DOM layer
+- `initData` keys
+- `TradingView`, `TVD`, and `TVSettings` keys
+- feature-toggle key hash/count
+- script count and chart readiness
+
+Run it locally:
+
+```sh
+npx playwright install chromium
+npm run census
+```
+
+If it reports drift, review the report and update the baseline only after verifying the changes:
+
+```sh
+npm run census -- --update
+```
+
+The weekly `.github/workflows/census.yml` workflow opens or updates a `[census] TradingView UI/config drift` issue on failure and closes it when the census is green again. It does not use an account, cookies, or private data.
+
 ## How it works
 
 ```
@@ -235,6 +261,7 @@ src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, p
 src/lib/plugin-files.ts plugin validation, embedding, and CLI plugin install
 src/lib/copy-app.ts    user-owned copy installer
 src/lib/restart-prompt.ts running-instance prompt
+tools/census/          Playwright compatibility baseline/reporting
 examples/plugins/      example external plugin
 test/                  unit tests for logic, boot filters, plugins, and ASAR patching
 docs/                  architecture, plugin SDK, and patch design
@@ -253,7 +280,8 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Restart prompt for a running TradingView instance
 - [ ] Root-owned in-place patching with explicit elevation
 - [ ] Snap validation (inspect binding and preload readability under confinement)
-- [ ] Signed release artifacts and scheduled web census
+- [ ] Signed release artifacts (GitHub attestations are present)
+- [x] Scheduled web compatibility census with issue reporting
 - [ ] Windows/macOS launcher
 - [ ] Remote/signed plugin registry and hot reload
 
