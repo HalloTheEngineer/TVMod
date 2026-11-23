@@ -5,6 +5,7 @@ import {
   withPluginSetting,
   type TvmodConfig,
 } from './config.js';
+import type { RegistryClient, RegistryPluginInfo } from './host.js';
 import type { PanelPlugin } from './plugin-types.js';
 
 const PANEL_ID = 'tvmod-root';
@@ -142,6 +143,51 @@ const PANEL_STYLE = `
   .plugin-error { margin-top: 6px; color: #ff9b9b; font-size: 10.5px; }
   .empty { padding: 24px 12px; color: #8f98a3; text-align: center; }
 
+  .tabs { display: flex; gap: 4px; padding: 0 16px 10px; }
+  .tab {
+    padding: 5px 10px; border: 1px solid transparent; border-radius: 7px;
+    background: transparent; color: #8f98a3;
+    font: inherit; font-weight: 650; cursor: pointer;
+  }
+  .tab:hover { background: #1a1f25; color: #cfd5dc; }
+  .tab[data-active="true"] {
+    border-color: #3a3f46; background: #1d2229; color: #e9ecef;
+  }
+
+  .registry { min-height: 0; overflow: auto; padding: 0 10px 10px; }
+  .registry-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 2px 6px 8px;
+  }
+  .registry-status { color: #8f98a3; font-size: 11px; }
+  .registry-status[data-error="true"] { color: #ff9b9b; }
+  .registry-refresh {
+    flex: none; padding: 3px 8px; border: 1px solid #3a3f46; border-radius: 6px;
+    background: #1d2229; color: #cfd5dc; font: inherit; font-size: 10.5px;
+    cursor: pointer;
+  }
+  .registry-refresh:hover { background: #262c34; }
+  .registry-refresh:disabled { opacity: 0.55; cursor: default; }
+
+  .registry-item {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 14px; padding: 10px; border: 1px solid #262b32; border-radius: 10px;
+    background: #171b20;
+  }
+  .registry-item + .registry-item { margin-top: 4px; }
+  .badge.version {
+    border-color: #333a42; background: #1c2127; color: #9aa4ae;
+    text-transform: none; letter-spacing: 0;
+  }
+  .install {
+    flex: none; margin-top: 2px; padding: 5px 10px;
+    border: 1px solid #2f4a6b; border-radius: 7px;
+    background: #16222e; color: #8fc2ff;
+    font: inherit; font-weight: 650; cursor: pointer;
+  }
+  .install:hover { background: #1b2c3d; }
+  .install:disabled { opacity: 0.55; cursor: default; }
+
   .reload {
     margin: 0 16px 8px; padding: 9px 10px; border: 1px solid #4b3a23;
     border-radius: 8px; background: #201a13; color: #ffcf9e; font-size: 11px;
@@ -171,6 +217,7 @@ export interface PanelOptions {
   setConfig: (config: TvmodConfig) => void;
   defaultConfig: () => TvmodConfig;
   getPluginError?: (id: string) => string | null;
+  registry?: RegistryClient;
 }
 
 export interface PanelHandle {
@@ -228,7 +275,18 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
         <input class="search" type="search" placeholder="Search plugins" aria-label="Search plugins">
         <span class="count"></span>
       </div>
+      <div class="tabs">
+        <button class="tab" type="button" data-tab="plugins" data-active="true">Plugins</button>
+        <button class="tab" type="button" data-tab="registry">Registry</button>
+      </div>
       <div class="plugins"></div>
+      <div class="registry" hidden>
+        <div class="registry-bar">
+          <span class="registry-status"></span>
+          <button class="registry-refresh" type="button">Refresh</button>
+        </div>
+        <div class="registry-items"></div>
+      </div>
       <div class="reload" hidden></div>
       <div class="footer">
         <button class="reset" type="button">Reset defaults</button>
@@ -248,9 +306,35 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   const reload = shadow.querySelector<HTMLElement>('.reload');
   const reset = shadow.querySelector<HTMLButtonElement>('.reset');
   const version = shadow.querySelector<HTMLElement>('.version');
+  const tabs = Array.from(shadow.querySelectorAll<HTMLButtonElement>('.tab'));
+  const registryView = shadow.querySelector<HTMLElement>('.registry');
+  const registryItems = shadow.querySelector<HTMLElement>('.registry-items');
+  const registryStatus = shadow.querySelector<HTMLElement>('.registry-status');
+  const registryRefresh = shadow.querySelector<HTMLButtonElement>('.registry-refresh');
 
   if (version) version.textContent = `v${options.version}`;
   if (!list) return null;
+
+  const registryTab = tabs.find((tab) => tab.dataset.tab === 'registry');
+  if (!options.registry && registryTab) registryTab.hidden = true;
+
+  let activeTab: 'plugins' | 'registry' = 'plugins';
+  let enabledCount = 0;
+  const registryState: {
+    loaded: boolean;
+    loading: boolean;
+    items: RegistryPluginInfo[];
+    installing: Set<string>;
+    error: string | null;
+    message: string | null;
+  } = {
+    loaded: false,
+    loading: false,
+    items: [],
+    installing: new Set(),
+    error: null,
+    message: null,
+  };
 
   const cards = new Map<
     string,
@@ -404,7 +488,233 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
         isPluginEnabled(config, plugin.id) !== initialEnabled.get(plugin.id)
     );
 
+  const updateRegistryStatus = (): void => {
+    if (!registryStatus || !registryRefresh) return;
+    registryRefresh.disabled = registryState.loading;
+
+    if (registryState.loading) {
+      registryStatus.dataset.error = 'false';
+      registryStatus.textContent = 'Loading registries…';
+    } else if (registryState.error) {
+      registryStatus.dataset.error = 'true';
+      registryStatus.textContent = registryState.error;
+    } else if (registryState.message) {
+      registryStatus.dataset.error = 'false';
+      registryStatus.textContent = registryState.message;
+    } else if (registryState.items.length === 0) {
+      registryStatus.dataset.error = 'false';
+      registryStatus.textContent = 'No plugins available';
+    } else {
+      registryStatus.dataset.error = 'false';
+      const total = registryState.items.length;
+      registryStatus.textContent = `${total} plugin${total === 1 ? '' : 's'} available`;
+    }
+  };
+
+  const renderRegistry = (): void => {
+    if (!registryItems) return;
+    registryItems.textContent = '';
+    updateRegistryStatus();
+
+    const query = (search?.value ?? '').trim().toLowerCase();
+    let visible = 0;
+
+    for (const item of registryState.items) {
+      const haystack = [
+        item.name,
+        item.id,
+        item.description,
+        item.author ?? '',
+        item.registry,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (query && !haystack.includes(query)) continue;
+      visible += 1;
+
+      const card = document.createElement('div');
+      card.className = 'registry-item';
+
+      const info = document.createElement('div');
+      info.className = 'plugin-info';
+
+      const name = document.createElement('div');
+      name.className = 'plugin-name';
+      name.append(document.createTextNode(item.name));
+
+      const badges = document.createElement('span');
+      badges.style.display = 'inline-flex';
+      badges.style.gap = '4px';
+      badges.style.flexWrap = 'wrap';
+
+      const versionBadge = document.createElement('span');
+      versionBadge.className = 'badge version';
+      versionBadge.textContent = `v${item.version}`;
+
+      const registryBadge = document.createElement('span');
+      registryBadge.className = 'badge external';
+      registryBadge.textContent = item.registry;
+
+      badges.append(versionBadge, registryBadge);
+      name.append(badges);
+
+      const desc = document.createElement('div');
+      desc.className = 'plugin-desc';
+      desc.textContent = item.description || 'No description.';
+
+      info.append(name, desc);
+      if (item.author) {
+        const meta = document.createElement('div');
+        meta.className = 'plugin-meta';
+        meta.textContent = item.author;
+        info.append(meta);
+      }
+
+      const key = `${item.registry}:${item.id}`;
+      const installing = registryState.installing.has(key);
+      const installed = options.plugins.find(
+        (plugin) => plugin.external && plugin.id === item.id
+      );
+      const upToDate = installed?.version === item.version;
+
+      const install = document.createElement('button');
+      install.type = 'button';
+      install.className = 'install';
+      install.textContent = installing
+        ? 'Installing…'
+        : upToDate
+          ? 'Installed'
+          : installed
+            ? 'Update'
+            : 'Install';
+      install.disabled = installing || registryState.loading || upToDate;
+      if (upToDate) {
+        install.title = `Already installed: v${item.version}`;
+      } else if (installed) {
+        install.title = `Replace v${installed.version} with v${item.version}`;
+      }
+      install.addEventListener('click', () => {
+        void installRegistryPlugin(item, Boolean(installed && !upToDate));
+      });
+
+      card.append(info, install);
+      registryItems.append(card);
+    }
+
+    if (visible === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent =
+        registryState.items.length === 0 && !registryState.loading
+          ? 'No plugins in the configured registries'
+          : 'No registry plugins match';
+      registryItems.append(empty);
+    }
+  };
+
+  const loadRegistry = async (force = false): Promise<void> => {
+    if (!options.registry || registryState.loading) return;
+    if (registryState.loaded && !force) {
+      renderRegistry();
+      return;
+    }
+
+    registryState.loading = true;
+    registryState.error = null;
+    registryState.message = null;
+    renderRegistry();
+
+    try {
+      const result = await options.registry.list();
+      if (!result.ok) {
+        throw new Error(result.error ?? 'failed to load registries');
+      }
+      registryState.items = result.plugins ?? [];
+      registryState.loaded = true;
+    } catch (error) {
+      registryState.error =
+        error instanceof Error ? error.message : String(error);
+    } finally {
+      registryState.loading = false;
+      renderRegistry();
+    }
+  };
+
+  const installRegistryPlugin = async (
+    item: RegistryPluginInfo,
+    force = false
+  ): Promise<void> => {
+    if (!options.registry) return;
+    const key = `${item.registry}:${item.id}`;
+    if (registryState.installing.has(key)) return;
+
+    registryState.installing.add(key);
+    registryState.error = null;
+    registryState.message = `Installing ${item.name}…`;
+    renderRegistry();
+
+    try {
+      const result = await options.registry.install(
+        item.id,
+        item.registry,
+        force
+      );
+      if (!result.ok) {
+        throw new Error(
+          (result.error || result.stderr || 'install failed').trim()
+        );
+      }
+      registryState.message = `${item.name} v${item.version} installed. TradingView is reloading…`;
+    } catch (error) {
+      registryState.error =
+        error instanceof Error ? error.message : String(error);
+      registryState.message = null;
+    } finally {
+      registryState.installing.delete(key);
+      renderRegistry();
+    }
+  };
+
+  const setTab = (tab: 'plugins' | 'registry'): void => {
+    if (tab === 'registry' && !options.registry) return;
+    activeTab = tab;
+
+    for (const button of tabs) {
+      button.dataset.active = button.dataset.tab === tab ? 'true' : 'false';
+    }
+    list.hidden = tab !== 'plugins';
+    if (registryView) registryView.hidden = tab !== 'registry';
+    if (search) {
+      search.placeholder =
+        tab === 'registry' ? 'Search registry' : 'Search plugins';
+      search.value = '';
+    }
+    if (count) count.hidden = tab === 'registry';
+
+    if (tab === 'registry') {
+      void loadRegistry();
+      renderRegistry();
+    } else {
+      sync();
+    }
+  };
+
+  for (const button of tabs) {
+    button.addEventListener('click', () => {
+      setTab(button.dataset.tab === 'registry' ? 'registry' : 'plugins');
+    });
+  }
+
+  registryRefresh?.addEventListener('click', () => {
+    void loadRegistry(true);
+  });
+
   const applyFilter = (): void => {
+    if (activeTab === 'registry') {
+      renderRegistry();
+      return;
+    }
+
     const query = (search?.value ?? '').trim().toLowerCase();
     let visible = 0;
 
@@ -417,6 +727,9 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     }
 
     empty.hidden = visible > 0;
+    if (count) {
+      count.textContent = `${enabledCount} / ${options.plugins.length} enabled`;
+    }
   };
 
   const sync = (): void => {
@@ -454,7 +767,10 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       }
     }
 
-    if (count) count.textContent = `${enabled} / ${options.plugins.length} enabled`;
+    enabledCount = enabled;
+    if (count && activeTab === 'plugins') {
+      count.textContent = `${enabled} / ${options.plugins.length} enabled`;
+    }
 
     const dirty = isBootDirty();
     if (dot) dot.hidden = !dirty;
@@ -476,7 +792,12 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     modal.hidden = !open;
     backdrop.hidden = !open;
     if (open) {
-      sync();
+      if (activeTab === 'registry') {
+        void loadRegistry();
+        renderRegistry();
+      } else {
+        sync();
+      }
       search?.focus();
     }
   };

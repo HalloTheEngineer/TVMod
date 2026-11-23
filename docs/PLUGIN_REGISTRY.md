@@ -1,6 +1,6 @@
 # Plugin registry
 
-TVMod v0.7.0 adds signed plugin bundles, signed registry indexes, registry installs, and automatic page reload after plugin changes in launcher mode.
+TVMod v0.8.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry installs, and automatic page reload after plugin changes in launcher mode.
 
 There is no default registry and no remote code is loaded automatically. You add a registry by pinning its public key.
 
@@ -105,6 +105,24 @@ tvmod plugin install hello-world
 
 In launcher mode, the page reloads automatically through the token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after installing plugins; the patch contains a snapshot of the preload.
 
+## Install from the plugin modal
+
+The gear modal has a **Registry** tab in launcher mode. It reads the same configured registries and pinned keys as the CLI.
+
+1. Add at least one registry with `tvmod plugin registry add`.
+2. Open the TVMod gear modal and switch to **Registry**.
+3. Search and click **Install**.
+
+Button states:
+
+- **Install** — the plugin is not installed.
+- **Update** — another version is installed; the install runs with `--force`.
+- **Installed** — the installed version matches the registry; the button is disabled.
+
+The tab calls the CLI through a main-process IPC bridge. Plugin ids and registry names are validated before `execFile` runs, so no shell is involved. A failed install shows the CLI error in the tab (for example, a checksum or signature failure).
+
+Patch mode has no main-process bootstrap, so the Registry tab cannot install there. Use the CLI and then `tvmod repair --yes`.
+
 Remove a registry:
 
 ```sh
@@ -144,8 +162,8 @@ tvmod plugin registry add local http://127.0.0.1:8765/index.json \
 
 ## Limitations
 
-- No central registry or web catalog UI yet.
-- No automatic updates; `plugin install` is explicit.
+- No central public registry or catalog; the in-app tab only lists registries you configured.
+- No automatic updates; installs and updates are explicit. The Registry tab only installs when you click it.
 - No key revocation/expiry.
 - Single-file plugins only.
 - Registry indexes and bundles are limited to 1 MiB.

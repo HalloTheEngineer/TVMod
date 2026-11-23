@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop** on Linux.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.7.0, launcher + patched-copy/in-place installer + signed plugin registry + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host.
+> Status: **v0.8.0, launcher + patched-copy/in-place installer + signed plugin registry with an in-app browser + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host.
 
 ## Features
 
@@ -15,6 +15,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Individual plugins** — toggle Adblock, Hide AI Copilot, Hide Community Hub, and Hide Sidebar independently.
 - **Local plugin SDK** — install single-file plugins with a manifest, permissions, boolean settings, and lifecycle cleanup.
 - **Signed plugin registry** — Ed25519-signed indexes/bundles, SHA-256 verification, pinned registry keys, and CLI browse/install.
+- **Registry browser** — a Registry tab in the gear modal lists configured registries, filters plugins, and installs or updates them from the verified registry path.
 - **Plugin hot reload** — launcher mode reloads TradingView pages automatically after plugin install/remove/refresh.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
@@ -41,7 +42,7 @@ Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Rel
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf tvmod-0.7.0-linux-x64.tar.gz
+tar -xzf tvmod-0.8.0-linux-x64.tar.gz
 cd tvmod-0.2.0-linux-x64
 ./tvmod install
 ```
@@ -51,17 +52,17 @@ Then close TradingView and start it from your normal icon. The release binary do
 To verify the GitHub build provenance:
 
 ```sh
-gh attestation verify tvmod-0.7.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.8.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 To verify the Sigstore signature, download the `.sigstore.json` assets and run:
 
 ```sh
 cosign verify-blob \
-  --bundle tvmod-0.7.0-linux-x64.tar.gz.sigstore.json \
+  --bundle tvmod-0.8.0-linux-x64.tar.gz.sigstore.json \
   --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.6.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  tvmod-0.7.0-linux-x64.tar.gz
+  tvmod-0.8.0-linux-x64.tar.gz
 ```
 
 The repo helper `tools/verify-release.sh 0.6.1` verifies both signatures and the checksum.
@@ -115,8 +116,8 @@ tvmod plugin registry add <name> <url> --key <public>
 tvmod plugin registry list
 tvmod plugin registry remove <name> --yes
 tvmod plugin registry sign <index.json> --key <private>
-tvmod plugin browse [query] [--registry <name>]
-tvmod plugin install <id> [--registry <name>]
+tvmod plugin browse [query] [--registry <name>] [--json]
+tvmod plugin install <id> [--registry <name>] [--force]
 ```
 
 Install options:
@@ -201,7 +202,7 @@ The gear button opens a modal with individual plugin toggles:
 | Hide Community Hub | on | Removes the Community Hub button. |
 | Hide Sidebar | off | Hides the right watchlist/details sidebar. |
 
-The modal includes search, a reload banner when a boot-time plugin changes, and **Reset defaults**. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
+The modal includes search, a reload banner when a boot-time plugin changes, and **Reset defaults**. The **Registry** tab browses your configured signed registries and exposes Install, Update, and Installed states; installs use the same verified CLI path and reload TradingView through the launcher control endpoint. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
 
 ### Local plugins
 
@@ -228,6 +229,8 @@ tvmod plugin registry add example https://example.com/tvmod/index.json --key ./k
 tvmod plugin browse
 tvmod plugin install hello-world
 ```
+
+The gear modal’s **Registry** tab uses the same registry configuration. Open it, search for a plugin, then click **Install**; an older installed version shows **Update**, and a current version shows **Installed**. The modal does not add a default registry or bypass key pinning.
 
 See [docs/PLUGIN_REGISTRY.md](docs/PLUGIN_REGISTRY.md) for the formats, key rotation, hosting, and security model. There is no default registry.
 
@@ -352,7 +355,7 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Snap-aware paths, `snap run` launch, and a confinement probe
 - [ ] Snap validation on a confined snapd host (inspect binding and preload readability)
 - [x] Sigstore keyless release signing and GitHub provenance
-- [x] Ed25519-signed plugin registry and hot page reload
+- [x] Ed25519-signed plugin registry, in-app registry browser, and hot page reload
 - [x] Scheduled web compatibility census with issue reporting
 - [ ] Windows/macOS launcher
 

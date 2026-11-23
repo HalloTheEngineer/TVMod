@@ -14,6 +14,7 @@ import { findInstall, type AppInstall } from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
 import {
   controlFile,
+  isStandaloneBinary,
   launchLog,
   logsDir,
   ensureDir,
@@ -360,7 +361,14 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
       ok: boolean;
       deferred: boolean;
       preloads?: string[];
-    }>(client, buildBootstrapScript(state.preloadPath, controlFile), 'bootstrap');
+    }>(
+      client,
+      buildBootstrapScript(state.preloadPath, controlFile, [
+        process.execPath,
+        ...(isStandaloneBinary() ? [] : [process.argv[1] ?? '']),
+      ]),
+      'bootstrap'
+    );
     debug(`bootstrap: ${JSON.stringify(bootstrap)}`);
 
     if (!bootstrap?.ok) {

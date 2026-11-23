@@ -207,7 +207,7 @@ export function registrySignCommand(
 
 export async function pluginBrowseCommand(
   query: string | undefined,
-  options: { registry?: string } = {}
+  options: { registry?: string; json?: boolean } = {}
 ): Promise<void> {
   const config = loadRegistries();
   let records = config.registries;
@@ -222,8 +222,18 @@ export async function pluginBrowseCommand(
     );
   }
 
-  heading('Registry plugins');
+  if (!options.json) heading('Registry plugins');
   let found = 0;
+  let failures = 0;
+  let firstError = '';
+  const listed: Array<{
+    id: string;
+    name: string;
+    description: string;
+    version: string;
+    author?: string;
+    registry: string;
+  }> = [];
 
   for (const record of records) {
     try {
@@ -232,19 +242,36 @@ export async function pluginBrowseCommand(
         const haystack = `${entry.id} ${entry.name} ${entry.description}`.toLowerCase();
         if (query && !haystack.includes(query.toLowerCase())) continue;
         found += 1;
-        info(
-          `  ${entry.id}  v${entry.version}  ${entry.name}  [${record.name}]`
-        );
-        if (entry.author) info(`      author: ${entry.author}`);
-        if (entry.description) info(`      ${entry.description}`);
+        listed.push({
+          id: entry.id,
+          name: entry.name,
+          description: entry.description,
+          version: entry.version,
+          author: entry.author,
+          registry: record.name,
+        });
+        if (!options.json) {
+          info(
+            `  ${entry.id}  v${entry.version}  ${entry.name}  [${record.name}]`
+          );
+          if (entry.author) info(`      author: ${entry.author}`);
+          if (entry.description) info(`      ${entry.description}`);
+        }
       }
     } catch (error) {
-      warn(
-        `registry ${record.name}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      failures += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!firstError) firstError = `registry ${record.name}: ${message}`;
+      warn(`registry ${record.name}: ${message}`);
     }
+  }
+
+  if (options.json) {
+    if (found === 0 && failures === records.length) {
+      throw new UserError(firstError || 'failed to load registries');
+    }
+    info(JSON.stringify(listed));
+    return;
   }
 
   if (found === 0) info('  no matching plugins');

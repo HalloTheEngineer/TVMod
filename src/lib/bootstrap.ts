@@ -1,18 +1,93 @@
 export function buildBootstrapScript(
   preloadPath: string,
-  controlFile: string
+  controlFile: string,
+  cliCommand: string[]
 ): string {
   return `(() => {
-  const { app, session, webContents } = require('electron');
+  const { app, session, webContents, ipcMain } = require('electron');
   const http = require('node:http');
   const fs = require('node:fs');
   const crypto = require('node:crypto');
   const path = require('node:path');
+  const { execFile } = require('node:child_process');
   const PRELOAD = ${JSON.stringify(preloadPath)};
   const CONTROL_FILE = ${JSON.stringify(controlFile)};
+  const CLI = ${JSON.stringify(cliCommand)};
   const MARK = '__tvmodPatched';
   let controlServer = null;
   let controlToken = null;
+
+  const runCli = (args) =>
+    new Promise((resolve) => {
+      if (!CLI.length) {
+        resolve({ ok: false, stdout: '', stderr: 'CLI command is unavailable', error: 'CLI command is unavailable' });
+        return;
+      }
+      execFile(
+        CLI[0],
+        [...CLI.slice(1), ...args],
+        {
+          env: process.env,
+          timeout: 60000,
+          maxBuffer: 4 * 1024 * 1024
+        },
+        (error, stdout, stderr) => {
+          resolve({
+            ok: !error,
+            stdout: String(stdout || ''),
+            stderr: String(stderr || ''),
+            error: error ? String(error.message || error) : null
+          });
+        }
+      );
+    });
+
+  const registerRegistryIpc = () => {
+    try {
+      ipcMain.handle('tvmod:registry:list', async () => {
+        const result = await runCli(['plugin', 'browse', '--json']);
+        if (!result.ok) {
+          return {
+            ok: false,
+            error: result.stderr || result.error || 'failed to browse registries'
+          };
+        }
+        try {
+          return { ok: true, plugins: JSON.parse(result.stdout || '[]') };
+        } catch {
+          return { ok: false, error: 'registry browse returned invalid JSON' };
+        }
+      });
+
+      ipcMain.handle('tvmod:registry:install', async (_event, id, registry, force) => {
+        if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(id)) {
+          return { ok: false, error: 'invalid plugin id' };
+        }
+        const args = ['plugin', 'install', id];
+        if (typeof registry === 'string' && registry) {
+          if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(registry)) {
+            return { ok: false, error: 'invalid registry name' };
+          }
+          args.push('--registry', registry);
+        }
+        if (force === true) args.push('--force');
+        const result = await runCli(args);
+        const stderr = String(result.stderr || '').trim();
+        return {
+          ok: result.ok,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          error: result.ok
+            ? undefined
+            : stderr.replace(/^error\s+/i, '') || result.error
+        };
+      });
+    } catch (error) {
+      console.error('[tvmod] registry IPC registration failed', error);
+    }
+  };
+
+  registerRegistryIpc();
 
   const patch = () => {
     const currentSession = session.defaultSession;

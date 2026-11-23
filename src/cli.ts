@@ -83,6 +83,7 @@ Plugin options:
   --key <path>            signing public/private key for pack/registry commands
   --out <path>            output path for pack/registry sign
   --registry <name>       restrict browse/install to one registry
+  --json                  machine-readable output (plugin browse)
 
 Other:
   -h, --help              show this help
@@ -117,6 +118,7 @@ async function run(): Promise<void> {
       key: { type: 'string' },
       out: { type: 'string' },
       registry: { type: 'string' },
+      json: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -241,7 +243,10 @@ async function run(): Promise<void> {
           });
           return;
         case 'browse':
-          await pluginBrowseCommand(arg, { registry });
+          await pluginBrowseCommand(arg, {
+            registry,
+            json: Boolean(values.json),
+          });
           return;
         case 'install':
           await pluginInstallCommand(arg, {

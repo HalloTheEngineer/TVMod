@@ -1,5 +1,9 @@
-import { contextBridge, webFrame } from 'electron';
+import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import { start } from './core/index.js';
+import type {
+  RegistryInstallResult,
+  RegistryListResult,
+} from './core/host.js';
 import { TVMOD_VERSION } from './version.js';
 
 const VERSION = TVMOD_VERSION;
@@ -46,5 +50,14 @@ if (isSupportedPage()) {
     executeJavaScript: (code) => webFrame.executeJavaScript(code),
     insertCSS: (css) => webFrame.insertCSS(css),
     removeInsertedCSS: (key) => webFrame.removeInsertedCSS(key),
+    registryList: () =>
+      ipcRenderer.invoke('tvmod:registry:list') as Promise<RegistryListResult>,
+    registryInstall: (id, registry, force) =>
+      ipcRenderer.invoke(
+        'tvmod:registry:install',
+        id,
+        registry,
+        force
+      ) as Promise<RegistryInstallResult>,
   });
 }

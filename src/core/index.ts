@@ -55,6 +55,14 @@ export function start(version: string, host: Host): void {
   });
 
   let panel: PanelHandle | null = null;
+  const registry =
+    host.registryList && host.registryInstall
+      ? {
+          list: () => host.registryList!(),
+          install: (id: string, name?: string, force?: boolean) =>
+            host.registryInstall!(id, name, force),
+        }
+      : undefined;
 
   const syncPlugins = (): void => {
     void pluginHost.sync().then(() => panel?.refresh());
@@ -77,6 +85,7 @@ export function start(version: string, host: Host): void {
         },
         defaultConfig: () => defaultConfig(plugins),
         getPluginError: (id) => pluginHost.errorFor(id),
+        registry,
       });
     } catch (error) {
       console.error('[tvmod] failed to mount panel', error);
