@@ -41,6 +41,29 @@ export interface LaunchOptions {
   extraArgs?: string[];
 }
 
+async function evaluateMain<T>(
+  client: CdpClient,
+  expression: string,
+  what: string,
+  attempts = 3
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await client.evaluate<T>(expression);
+    } catch (error) {
+      lastError = error;
+      debug(`${what} failed (${attempt}/${attempts}): ${errorMessage(error)}`);
+      await sleep(200);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`${what} failed`);
+}
+
 async function waitForInspector(
   logPath: string,
   timeoutMs: number,
@@ -294,20 +317,40 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
 
     debug(`inspector: ${wsUrl}`);
     client = await CdpClient.connect(wsUrl);
+    debug('inspector connected');
     await client.send('Runtime.enable');
-    await waitForMainProcess(client, timeoutMs);
+    debug('runtime enabled');
 
-    const bootstrap = await client.evaluate<{
+    if (install.flavor !== 'snap') {
+      const inspectedPid = await evaluateMain<number>(
+        client,
+        'process.pid',
+        'PID check'
+      );
+      debug(`inspected pid: ${String(inspectedPid)}`);
+      if (inspectedPid !== child.pid) {
+        throw new UserError(
+          `inspector PID mismatch (expected ${child.pid}, got ${inspectedPid})`
+        );
+      }
+    }
+
+    await waitForMainProcess(client, timeoutMs);
+    debug('main process ready');
+
+    const bootstrap = await evaluateMain<{
       ok: boolean;
       deferred: boolean;
       preloads?: string[];
-    }>(buildBootstrapScript(state.preloadPath));
+    }>(client, buildBootstrapScript(state.preloadPath), 'bootstrap');
+    debug(`bootstrap: ${JSON.stringify(bootstrap)}`);
 
     if (!bootstrap?.ok) {
       throw new UserError('the main-process bootstrap was rejected');
     }
 
     await waitForPreload(client, state.preloadPath, timeoutMs);
+    debug('preload confirmed');
 
     heading(`TVMod ${__TVMOD_VERSION__}`);
     label('TradingView', install.version ?? 'unknown');

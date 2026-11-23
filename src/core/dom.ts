@@ -69,12 +69,7 @@ export function startDomObserver(
   const schedule = (): void => {
     if (scheduled) return;
     scheduled = true;
-
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(run);
-    } else {
-      setTimeout(run, 50);
-    }
+    setTimeout(run, 250);
   };
 
   const root = document.documentElement;
