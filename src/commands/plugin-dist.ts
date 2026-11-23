@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   installPluginDirectory,
+  readInstalledPlugins,
   readPluginDirectory,
 } from '../lib/plugin-files.js';
 import {
@@ -25,6 +26,10 @@ import {
 } from '../lib/registry.js';
 import { UserError } from '../lib/errors.js';
 import { displayPath, ensureDir } from '../lib/paths.js';
+import {
+  getRegistryInstall,
+  recordRegistryInstall,
+} from '../lib/plugin-provenance.js';
 import { readState } from '../lib/state.js';
 import { heading, info, label, ok, warn } from '../lib/logger.js';
 import {
@@ -256,6 +261,12 @@ export async function pluginBrowseCommand(
   let found = 0;
   let failures = 0;
   let firstError = '';
+  const installed = new Map(
+    readInstalledPlugins().plugins.map((plugin) => [
+      plugin.manifest.id,
+      plugin.manifest.version,
+    ])
+  );
   const listed: Array<{
     id: string;
     name: string;
@@ -263,6 +274,8 @@ export async function pluginBrowseCommand(
     version: string;
     author?: string;
     registry: string;
+    installedVersion?: string;
+    sourceRegistry?: string;
   }> = [];
 
   for (const record of records) {
@@ -272,6 +285,10 @@ export async function pluginBrowseCommand(
         const haystack = `${entry.id} ${entry.name} ${entry.description}`.toLowerCase();
         if (query && !haystack.includes(query.toLowerCase())) continue;
         found += 1;
+        const installedVersion = installed.get(entry.id);
+        const sourceRegistry = installedVersion
+          ? getRegistryInstall(entry.id)?.registry
+          : undefined;
         listed.push({
           id: entry.id,
           name: entry.name,
@@ -279,6 +296,8 @@ export async function pluginBrowseCommand(
           version: entry.version,
           author: entry.author,
           registry: record.name,
+          ...(installedVersion ? { installedVersion } : {}),
+          ...(sourceRegistry ? { sourceRegistry } : {}),
         });
         if (!options.json) {
           info(
@@ -286,6 +305,13 @@ export async function pluginBrowseCommand(
           );
           if (entry.author) info(`      author: ${entry.author}`);
           if (entry.description) info(`      ${entry.description}`);
+          if (installedVersion) {
+            info(
+              `      installed v${installedVersion}${
+                sourceRegistry ? ` via ${sourceRegistry}` : ''
+              }`
+            );
+          }
         }
       }
     } catch (error) {
@@ -347,11 +373,21 @@ export async function pluginInstallCommand(
     throw new UserError(`plugin ${id} was not found in any configured registry`);
   }
   if (matches.length > 1) {
-    throw new UserError(
-      `plugin ${id} exists in multiple registries (${matches
-        .map((match) => match.record.name)
-        .join(', ')}); pass --registry`
+    const installed = readInstalledPlugins().plugins.some(
+      (plugin) => plugin.manifest.id === id
     );
+    const source = installed ? getRegistryInstall(id)?.registry : undefined;
+    const preferred = source
+      ? matches.filter((match) => match.record.name === source)
+      : [];
+    if (preferred.length !== 1) {
+      throw new UserError(
+        `plugin ${id} exists in multiple registries (${matches
+          .map((match) => match.record.name)
+          .join(', ')}); pass --registry`
+      );
+    }
+    matches.splice(0, matches.length, preferred[0]!);
   }
 
   const { record, entry } = matches[0]!;
@@ -401,6 +437,13 @@ export async function pluginInstallCommand(
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
+
+  recordRegistryInstall(entry.id, {
+    registry: record.name,
+    indexUrl: record.url,
+    version: entry.version,
+    installedAt: new Date().toISOString(),
+  });
 
   heading(`Installed plugin from ${record.name}: ${entry.name}`);
   label('id', entry.id);

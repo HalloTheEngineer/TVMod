@@ -1,6 +1,6 @@
 # Plugin registry
 
-TVMod v0.10.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry management/installs, bulk updates, and automatic page reload after plugin changes in launcher mode.
+TVMod v0.11.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry management/installs, bulk updates, install provenance, and automatic page reload after plugin changes in launcher mode.
 
 There is no default registry and no remote code is loaded automatically. You add a registry by pinning its public key.
 
@@ -105,8 +105,9 @@ tvmod plugin install hello-world
 5. verifies the Ed25519 bundle signature
 6. checks the manifest id and version against the index
 7. installs the plugin
-8. rebuilds the installed preload
-9. asks the running launcher (if available) to reload TradingView pages
+8. records the source registry, index URL, version, and install time
+9. rebuilds the installed preload
+10. asks the running launcher (if available) to reload TradingView pages
 
 In launcher mode, the page reloads automatically through the token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after installing plugins; the patch contains a snapshot of the preload.
 
@@ -141,7 +142,7 @@ When an installed external plugin has a different version in a configured regist
 3. keeps the page open and lists failures if any update fails;
 4. offers **Reload page** to apply successful updates after a partial failure.
 
-If the same plugin id is offered by multiple registries, bulk update skips it and asks you to update that plugin individually. TVMod does not yet record which registry installed a plugin, so it cannot choose safely.
+If the same plugin id is offered by multiple registries, bulk update prefers the registry recorded when the plugin was installed. It skips the id only if that source registry is no longer configured or does not offer the plugin.
 
 The tab calls the CLI through a main-process IPC bridge. Plugin ids and registry names are validated before `execFile`/`spawn` runs, no shell is involved, and public keys are capped at 16 KiB. A failed install shows the CLI error in the tab (for example, a checksum or signature failure).
 
@@ -154,6 +155,28 @@ tvmod plugin registry remove example --yes
 ```
 
 Removing a registry does not uninstall plugins that came from it.
+
+## Install provenance
+
+Registry installs are recorded in `<platform data dir>/registry-installs.json`:
+
+```json
+{
+  "schema": 1,
+  "installs": {
+    "hello-world": {
+      "registry": "alpha",
+      "indexUrl": "https://example.com/tvmod/index.json",
+      "version": "1.1.0",
+      "installedAt": "2026-11-23T21:30:54.157Z"
+    }
+  }
+}
+```
+
+`tvmod plugin list` shows the source registry. Bulk updates and `plugin install <id>` use it to choose between registries that publish the same id. Installing a local plugin or removing a plugin clears its record. Removing a registry does not delete provenance for plugins installed from it.
+
+Provenance is advisory local metadata. Every candidate registry and bundle is still signature- and hash-verified; a record never bypasses those checks.
 
 ## Key rotation
 
@@ -188,7 +211,7 @@ tvmod plugin registry add local http://127.0.0.1:8765/index.json \
 
 - No central public registry or catalog; the in-app tab only lists registries you configured.
 - No background or automatic updates; the tab checks when it loads or you press **Refresh**. Installs and updates require a click.
-- No installed-plugin registry provenance, so bulk update skips ambiguous ids.
+- Provenance is keyed by registry name; replacing a registry with the same name but a different publisher changes which source bulk update prefers. All candidates are still signature-verified.
 - No key revocation/expiry.
 - Single-file plugins only.
 - Registry indexes and bundles are limited to 1 MiB.

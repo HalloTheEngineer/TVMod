@@ -862,6 +862,9 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       if (installed && !upToDate) {
         metaParts.push(`installed v${installed.version ?? '0.0.0'}`);
       }
+      if (installed && item.sourceRegistry) {
+        metaParts.push(`via ${item.sourceRegistry}`);
+      }
       if (metaParts.length > 0) {
         const meta = document.createElement('div');
         meta.className = 'plugin-meta';

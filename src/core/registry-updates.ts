@@ -42,12 +42,21 @@ export function planRegistryUpdates(
   const ambiguous: string[] = [];
 
   for (const [id, group] of candidates) {
+    let item = group[0]!;
+
     if (group.length > 1) {
-      ambiguous.push(id);
-      continue;
+      const source = group.find((candidate) => candidate.sourceRegistry)
+        ?.sourceRegistry;
+      const preferred = source
+        ? group.filter((candidate) => candidate.registry === source)
+        : [];
+      if (preferred.length !== 1) {
+        ambiguous.push(id);
+        continue;
+      }
+      item = preferred[0]!;
     }
 
-    const item = group[0]!;
     updates.push({
       id,
       name: item.name,

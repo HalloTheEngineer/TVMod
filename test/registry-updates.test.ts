@@ -11,7 +11,8 @@ const installed = [
 function plugin(
   id: string,
   version: string,
-  registry = 'test'
+  registry = 'test',
+  sourceRegistry?: string
 ) {
   return {
     id,
@@ -19,6 +20,7 @@ function plugin(
     description: '',
     version,
     registry,
+    ...(sourceRegistry ? { sourceRegistry } : {}),
   };
 }
 
@@ -50,6 +52,35 @@ test('planRegistryUpdates skips updates offered by multiple registries', () => {
     [
       plugin('hello-world', '1.1.0', 'alpha'),
       plugin('hello-world', '1.2.0', 'beta'),
+    ],
+    installed
+  );
+
+  assert.deepEqual(plan.updates, []);
+  assert.deepEqual(plan.ambiguous, ['hello-world']);
+});
+
+test('planRegistryUpdates prefers the recorded source registry', () => {
+  const plan = planRegistryUpdates(
+    [
+      plugin('hello-world', '1.1.0', 'alpha', 'beta'),
+      plugin('hello-world', '1.2.0', 'beta', 'beta'),
+    ],
+    installed
+  );
+
+  assert.deepEqual(
+    plan.updates.map((update) => update.registry),
+    ['beta']
+  );
+  assert.deepEqual(plan.ambiguous, []);
+});
+
+test('planRegistryUpdates stays ambiguous when the source registry is gone', () => {
+  const plan = planRegistryUpdates(
+    [
+      plugin('hello-world', '1.1.0', 'alpha', 'removed'),
+      plugin('hello-world', '1.2.0', 'beta', 'removed'),
     ],
     installed
   );

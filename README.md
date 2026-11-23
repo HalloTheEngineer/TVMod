@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and 
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.10.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
+> Status: **v0.11.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
@@ -17,6 +17,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Signed plugin registry** — Ed25519-signed indexes/bundles, SHA-256 verification, pinned registry keys, and CLI browse/install.
 - **Registry browser** — a Registry tab in the gear modal lists configured registries, filters plugins, installs or updates them, and manages registry keys from the panel.
 - **Bulk updates** — the Registry tab detects available updates and can apply all of them with a single TradingView reload.
+- **Install provenance** — registry installs record their source registry, so duplicate plugin ids resolve to the registry that installed the plugin.
 - **Plugin hot reload** — launcher mode reloads TradingView pages automatically after plugin install/remove/refresh.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
@@ -88,12 +89,12 @@ To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 ```sh
 cosign verify-blob \
   --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.10.0 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.11.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.10.0` verifies every archive signature and the combined checksum.
+The repo helper `tools/verify-release.sh 0.11.0` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -258,7 +259,7 @@ tvmod plugin browse
 tvmod plugin install hello-world
 ```
 
-The gear modal’s **Registry** tab uses the same registry configuration. Open **Manage registries** to add a registry with its HTTPS index URL and public key (paste it or choose a `.pem` file), or remove one. Search for a plugin and click **Install**; an older installed version shows **Update**, and a current version shows **Installed**. When updates exist, **Update all** installs them sequentially and reloads TradingView once. Ambiguous plugin ids offered by multiple registries are skipped until you update them individually. The modal does not add a default registry or bypass key pinning.
+The gear modal’s **Registry** tab uses the same registry configuration. Open **Manage registries** to add a registry with its HTTPS index URL and public key (paste it or choose a `.pem` file), or remove one. Search for a plugin and click **Install**; an older installed version shows **Update**, and a current version shows **Installed**. When updates exist, **Update all** installs them sequentially and reloads TradingView once. If multiple registries offer the same plugin id, bulk update uses the source registry recorded when the plugin was installed. It only skips the id when that source is unavailable or still ambiguous. The modal does not add a default registry or bypass key pinning.
 
 See [docs/PLUGIN_REGISTRY.md](docs/PLUGIN_REGISTRY.md) for the formats, key rotation, hosting, and security model. There is no default registry.
 
@@ -357,6 +358,7 @@ src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, p
 src/lib/plugin-files.ts plugin validation, embedding, and CLI plugin install
 src/lib/plugin-signing.ts Ed25519 bundles/indexes
 src/lib/registry.ts     registry config, fetch, and verification
+src/lib/plugin-provenance.ts registry install source records
 src/lib/control.ts      launcher hot-reload control client
 src/commands/plugin-dist.ts pack/sign/registry/install commands
 src/lib/copy-app.ts    user-owned copy installer
@@ -389,6 +391,7 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Sigstore keyless release signing and GitHub provenance
 - [x] Ed25519-signed plugin registry, in-app registry browser, and hot page reload
 - [x] Registry management and bulk updates in the plugin modal
+- [x] Installed-plugin registry provenance for duplicate ids
 - [x] Scheduled web compatibility census with issue reporting
 - [x] Cross-platform builds and best-effort macOS launcher
 - [x] Windows standalone detection/launcher with MSIX detection and a clear unsupported error

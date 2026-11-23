@@ -11,6 +11,7 @@ export interface PlatformPaths {
   stateFile: string;
   controlFile: string;
   registriesFile: string;
+  registryInstallsFile: string;
   preloadTarget: string;
   snapPreloadTarget: string;
   backupsDir: string;
@@ -133,6 +134,7 @@ export function computePaths(
     stateFile,
     controlFile: path.join(stateDir, 'control.json'),
     registriesFile: path.join(configDir, 'registries.json'),
+    registryInstallsFile: path.join(dataDir, 'registry-installs.json'),
     preloadTarget,
     snapPreloadTarget: path.join(
       home,
@@ -164,6 +166,7 @@ export const launchLog = paths.launchLog;
 export const stateFile = paths.stateFile;
 export const controlFile = paths.controlFile;
 export const registriesFile = paths.registriesFile;
+export const registryInstallsFile = paths.registryInstallsFile;
 export const preloadTarget = paths.preloadTarget;
 export const snapPreloadTarget = paths.snapPreloadTarget;
 export const backupsDir = paths.backupsDir;

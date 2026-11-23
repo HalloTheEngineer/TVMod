@@ -5,6 +5,8 @@ export interface RegistryPluginInfo {
   version: string;
   author?: string;
   registry: string;
+  installedVersion?: string;
+  sourceRegistry?: string;
 }
 
 export interface RegistryListResult {

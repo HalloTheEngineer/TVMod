@@ -97,6 +97,8 @@ The main-process bootstrap also registers the registry IPC handlers: `tvmod:regi
 
 Bulk updates run `plugin install ... --no-reload` sequentially, then call the shared page-reload helper once. Partial failures leave the page open so the panel can show which plugins failed and offer a manual reload.
 
+Successful registry installs write `<data dir>/registry-installs.json` with the source registry, index URL, version, and timestamp. `plugin browse --json` includes `installedVersion` and `sourceRegistry`; the panel and bulk-update planner use them to choose the source registry when multiple registries publish the same id. Local plugin add/remove clears the record. Provenance is advisory and never bypasses registry signature checks.
+
 ## Platform layers
 
 `src/lib/paths.ts` resolves native config/data/state/log locations and launcher paths for Linux, macOS, and Windows. `src/lib/app-detect.ts` inspects Linux executables, macOS `.app` bundles, Windows standalone directories, and Windows MSIX package locations. `src/lib/proc.ts` lists and terminates processes with `pgrep`/`ps`, `/proc`, or `tasklist`/`taskkill`. `src/lib/desktop.ts` writes Linux `.desktop` entries, macOS `.command` launchers, or Windows Start Menu shortcuts. `src/lib/asar-patch.ts` contains platform-specific elevation for Linux, macOS, and Windows.

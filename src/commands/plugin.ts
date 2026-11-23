@@ -9,6 +9,10 @@ import {
   writeInstalledPreload,
 } from '../lib/plugin-files.js';
 import { requestPageReload } from '../lib/control.js';
+import {
+  clearRegistryInstall,
+  getRegistryInstall,
+} from '../lib/plugin-provenance.js';
 import { UserError } from '../lib/errors.js';
 import {
   displayPath,
@@ -77,6 +81,7 @@ export async function pluginAddCommand(
   const manifest = installPluginDirectory(sourceDir, {
     force: options.force,
   });
+  clearRegistryInstall(manifest.id);
 
   heading(`Installed plugin: ${manifest.name}`);
   label('id', manifest.id);
@@ -115,6 +120,10 @@ export function pluginListCommand(): void {
     if (manifest.settings?.length) {
       info(`      settings: ${manifest.settings.map((s) => s.key).join(', ')}`);
     }
+    const record = getRegistryInstall(manifest.id);
+    if (record) {
+      info(`      source: registry ${record.registry} (v${record.version})`);
+    }
   }
 
   for (const error of scan.errors) {
@@ -135,6 +144,7 @@ export async function pluginRemoveCommand(
   }
 
   removePluginDirectory(id);
+  clearRegistryInstall(id);
   ok(`removed plugin ${id}`);
   refreshInstalledPreload();
   warnIfPatched();
