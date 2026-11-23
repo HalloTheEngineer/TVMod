@@ -18,7 +18,7 @@ import {
   wrapperPath,
 } from '../lib/paths.js';
 import { tradingViewPids } from '../lib/proc.js';
-import { writeState } from '../lib/state.js';
+import { readState, writeState } from '../lib/state.js';
 import { heading, label, ok, warn } from '../lib/logger.js';
 import { sha256File } from '../lib/util.js';
 
@@ -56,6 +56,12 @@ export function installCommand(options: InstallOptions): void {
   const wrapper = writeWrapper(process.argv[1] ?? source);
   const entries = writeDesktopEntries(install, wrapper);
 
+  const previous = readState();
+  const preservedPatch =
+    previous?.patch && previous.app.asar === install.asar
+      ? previous.patch
+      : undefined;
+
   writeState({
     schema: 1,
     coreVersion: __TVMOD_VERSION__,
@@ -72,7 +78,15 @@ export function installCommand(options: InstallOptions): void {
     preloadPath: preloadTarget,
     wrapperPath: wrapper,
     desktopFile: entries.desktop,
+    ...(preservedPatch ? { patch: preservedPatch } : {}),
   });
+
+  if (preservedPatch) {
+    warn('this install already has a patch record; the record was preserved.');
+    warn('Run "tvmod repair --yes" to refresh the embedded preload after rebuilding.');
+  } else if (previous?.patch) {
+    warn('the previous patch record pointed at a different app.asar and was dropped.');
+  }
 
   heading(`TVMod ${__TVMOD_VERSION__} installed`);
   label('TradingView', `${install.version ?? 'unknown version'} (${describeFlavor(install.flavor)})`);

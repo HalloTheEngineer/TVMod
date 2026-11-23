@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { removeDesktopEntries, removeWrapper } from '../lib/desktop.js';
+import { UserError } from '../lib/errors.js';
 import {
   dataDir,
   displayPath,
@@ -15,6 +16,12 @@ export interface UninstallOptions {
 
 export function uninstallCommand(options: UninstallOptions): void {
   const state = readState();
+
+  if (state?.patch) {
+    throw new UserError(
+      'this install is patched; run "tvmod unpatch --yes" before uninstalling'
+    );
+  }
 
   removeDesktopEntries();
   removeWrapper();

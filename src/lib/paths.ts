@@ -17,6 +17,7 @@ export const logsDir = path.join(stateDir, 'logs');
 export const launchLog = path.join(logsDir, 'launch.log');
 export const stateFile = path.join(configDir, 'state.json');
 export const preloadTarget = path.join(dataDir, 'preload.js');
+export const backupsDir = path.join(dataDir, 'backups');
 
 export const localBinDir = path.join(home, '.local', 'bin');
 export const wrapperPath = path.join(localBinDir, 'tvmod');

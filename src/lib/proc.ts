@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import { sleep } from './util.js';
 
 function pidsFromPs(): number[] {
@@ -42,8 +43,38 @@ export function pidAlive(pid: number): boolean {
   }
 }
 
+export function pidsForInstall(exe: string): number[] {
+  if (exe.startsWith('/snap/')) return tradingViewPids();
+
+  let realExe: string;
+  try {
+    realExe = fs.realpathSync(exe);
+  } catch {
+    realExe = exe;
+  }
+
+  return tradingViewPids().filter((pid) => {
+    try {
+      const link = fs.readlinkSync(`/proc/${pid}/exe`).replace(/ \(deleted\)$/, '');
+      return link === realExe;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function isTradingViewRunning(): boolean {
   return tradingViewPids().some((pid) => pidAlive(pid));
+}
+
+export function terminatePids(pids: number[]): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      // Process already exited.
+    }
+  }
 }
 
 export async function waitForExit(
@@ -59,17 +90,5 @@ export async function waitForExit(
 }
 
 export function terminateTradingView(pids: number[]): void {
-  const result = spawnSync('pkill', ['-TERM', '-x', 'tradingview'], {
-    stdio: 'ignore',
-  });
-
-  if (result.error || result.status !== 0) {
-    for (const pid of pids) {
-      try {
-        process.kill(pid, 'SIGTERM');
-      } catch {
-        // Process already exited.
-      }
-    }
-  }
+  terminatePids(pids);
 }

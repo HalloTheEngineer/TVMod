@@ -9,13 +9,12 @@ import {
   buildReloadScript,
 } from '../lib/bootstrap.js';
 import { CdpClient, waitForMainProcess, waitForPreload } from '../lib/cdp.js';
-import { findInstall } from '../lib/app-detect.js';
+import { findInstall, type AppInstall } from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
 import { launchLog, logsDir, ensureDir } from '../lib/paths.js';
 import {
-  isTradingViewRunning,
-  terminateTradingView,
-  tradingViewPids,
+  pidsForInstall,
+  terminatePids,
   waitForExit,
 } from '../lib/proc.js';
 import { readState } from '../lib/state.js';
@@ -25,6 +24,7 @@ import {
   notify,
   parseInspectorUrl,
   readIfExists,
+  sha256File,
   sleep,
   tailFile,
 } from '../lib/util.js';
@@ -116,6 +116,75 @@ async function verifyPage(
   return false;
 }
 
+async function launchPatched(
+  install: AppInstall,
+  options: LaunchOptions
+): Promise<void> {
+  const pids = pidsForInstall(install.realExe);
+
+  if (pids.length > 0 && !options.userDataDir) {
+    if (!options.restart) {
+      notify(
+        'TVMod',
+        'TradingView is already running. Close it and click the icon again.'
+      );
+      throw new UserError(
+        `TradingView is already running (PID ${pids.join(
+          ', '
+        )}). Close it and try again, or run "tvmod launch --restart".`
+      );
+    }
+
+    warn(`closing TradingView (PID ${pids.join(', ')})`);
+    terminatePids(pids);
+    if (!(await waitForExit(pids))) {
+      throw new UserError(
+        'TradingView did not exit. Close it manually and try again.'
+      );
+    }
+  }
+
+  ensureDir(logsDir);
+  fs.writeFileSync(launchLog, '');
+
+  const fd = fs.openSync(launchLog, 'a');
+  const args = [
+    ...(options.userDataDir
+      ? [`--user-data-dir=${path.resolve(options.userDataDir)}`]
+      : []),
+    ...(options.extraArgs ?? []),
+  ];
+
+  let child: ChildProcess;
+  try {
+    child = spawn(install.command, [...install.baseArgs, ...args], {
+      cwd:
+        install.flavor === 'snap'
+          ? process.env.HOME
+          : path.dirname(install.realExe),
+      detached: true,
+      stdio: ['ignore', fd, fd],
+      env: { ...process.env, TVMOD: '1' },
+    });
+  } catch (error) {
+    fs.closeSync(fd);
+    throw new UserError(`failed to start TradingView: ${errorMessage(error)}`);
+  }
+
+  fs.closeSync(fd);
+  child.unref();
+
+  if (!child.pid) {
+    throw new UserError(`TradingView did not start.\n\n${tailFile(launchLog)}`);
+  }
+
+  heading(`TVMod ${__TVMOD_VERSION__} (patched install)`);
+  label('TradingView', install.version ?? 'unknown');
+  label('pid', String(child.pid));
+  if (options.printPid) info(`pid=${child.pid}`);
+  ok('TradingView is patched and was started normally.');
+}
+
 export async function launchCommand(options: LaunchOptions): Promise<void> {
   const state = readState();
 
@@ -130,15 +199,34 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
     );
   }
 
+  if (state.patch && install.asar) {
+    let currentHash: string | null = null;
+    try {
+      currentHash = sha256File(install.asar);
+    } catch {
+      currentHash = null;
+    }
+
+    if (currentHash === state.patch.patchedHash) {
+      await launchPatched(install, options);
+      return;
+    }
+
+    if (currentHash !== state.patch.originalHash) {
+      warn('the TVMod patch is stale (TradingView changed); falling back to the launcher.');
+      warn('Run "tvmod repair" or "tvmod unpatch" to update the patch state.');
+    }
+  }
+
   if (!fs.existsSync(state.preloadPath)) {
     throw new UserError(
       `preload is missing at ${state.preloadPath}. Run "tvmod install" again.`
     );
   }
 
-  if (isTradingViewRunning() && !options.userDataDir) {
-    const pids = tradingViewPids();
+  const pids = pidsForInstall(install.realExe);
 
+  if (pids.length > 0 && !options.userDataDir) {
     if (!options.restart) {
       const message = `TradingView is already running (PID ${pids.join(
         ', '
@@ -148,7 +236,7 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
     }
 
     warn(`closing TradingView (PID ${pids.join(', ')})`);
-    terminateTradingView(pids);
+    terminatePids(pids);
 
     if (!(await waitForExit(pids))) {
       throw new UserError(

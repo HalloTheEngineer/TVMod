@@ -59,3 +59,18 @@ Settings live in `localStorage` under `tvmod.settings.v1`. The preload reads the
 - `~/.local/share/applications/tradingview-vanilla.desktop` (unmodified)
 
 The user-level `tradingview.desktop` shadows the system launcher for that user. The vanilla entry remains available. Existing user-level files are backed up once and restored on uninstall.
+
+## Patch backend
+
+The optional patch backend uses the same preload bundle, but embeds it into the app:
+
+1. Extract `app.asar` with `@electron/asar`.
+2. Append an IIFE-wrapped copy of the preload to `preload/target-tvd-host-preload.js`.
+3. Repack with `unpack: '**/*.node'`, preserving the native modules in `app.asar.unpacked`.
+4. Replace `app.asar` after a verified backup.
+
+`tvmod repair` re-applies after an app update; `tvmod unpatch` restores only when the current hash matches the patched hash. `tvmod launch` detects an active patch and starts the app normally instead of injecting through the launcher a second time. See [PATCHING.md](PATCHING.md).
+
+## Electron compatibility note
+
+Electron 41 still supports `session.getPreloads`/`setPreloads`, but logs them as deprecated in favor of `registerPreloadScript`. A future release should support the new API and keep the legacy path as a fallback.

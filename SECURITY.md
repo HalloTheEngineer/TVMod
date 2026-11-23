@@ -26,6 +26,17 @@ A future mod API must:
 - pin and sign release artifacts;
 - verify update manifests before applying them.
 
+## Patch mode
+
+Patch mode modifies `app.asar` after explicit `--yes` confirmation:
+
+- it refuses Snap and non-writable installs in v0.1.0;
+- it creates and verifies a backup before replacing the ASAR;
+- `unpatch` only restores a backup when the current ASAR still matches the recorded patched hash;
+- the patched ASAR contains only TVMod code, no TradingView redistribution.
+
+Run patch mode against a trusted user-owned copy. A malicious local process able to replace `app.asar` can run code with the user’s privileges, just like any other application update.
+
 ## Scope
 
 TVMod intentionally does not touch paywall, trial, entitlement, account, or credential flows. Do not use it to bypass subscriptions or access controls.

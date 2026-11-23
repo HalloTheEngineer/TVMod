@@ -14,12 +14,15 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "dev": "npm run build && node dist/cli.cjs"
+    "dev": "npm run build && node dist/cli.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@electron/asar": "^4.3.2"
   }
 }

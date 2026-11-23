@@ -2,9 +2,9 @@
 
 Local mods for **TradingView Desktop** on Linux.
 
-TVMod is a small mod host that attaches to the official Electron app at launch. It does **not** modify `/usr/lib/tradingview` and does not distribute any TradingView code. A user-level desktop entry makes the normal TradingView icon start through TVMod.
+TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.1.0, launcher backend**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The in-place ASAR patch backend (Vencord-style) is designed but not implemented yet. Snap support is experimental.
+> Status: **v0.1.0, launcher + optional patch backend**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
 
 ## Features
 
@@ -12,8 +12,9 @@ TVMod is a small mod host that attaches to the official Electron app at launch. 
 - **Clean UI** — hides the AI copilot and community hub buttons by default.
 - **Hide sidebar** — optional; removes the right widget bar.
 - **Mod panel** — `Ctrl+Shift+M` or the floating `TV` button.
-- **No app file changes** — the launcher installs a preload for the duration of the running app; app updates don’t have to be repaired.
-- **Vanilla entry** — a separate “TradingView (Vanilla)” desktop entry is created too.
+- **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
+- **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
+- **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
 
 ## Requirements
 
@@ -57,7 +58,17 @@ tvmod install [--app <path>]     install the launcher, preload, and desktop entr
 tvmod launch [options]           attach TVMod to the app
 tvmod doctor [--app <path>]      show paths, versions, state, and running PIDs
 tvmod uninstall [--purge]        remove the desktop entries, wrapper, and state
-tvmod patch | repair | unpatch   planned ASAR patch backend (not implemented)
+tvmod patch --yes                embed the preload into a user-writable app.asar
+tvmod repair --yes               re-apply the patch after an app update
+tvmod unpatch --yes              restore the original app.asar
+```
+
+Patch options:
+
+```text
+--app <path>     override the detected TradingView executable
+--restart        close TradingView before modifying app.asar
+--yes            required confirmation
 ```
 
 Launch options:
@@ -72,6 +83,28 @@ Launch options:
 --timeout <seconds>     inspector/preload timeout
 --verbose               debug output
 ```
+
+## Patch mode
+
+The launcher is the default and works with the root-owned AUR install. Patch mode is for users who want the official launcher to start a modified `app.asar` with no inspector.
+
+Patch mode currently requires a **user-writable** install. The simplest way to get one:
+
+```sh
+cp -a /usr/lib/tradingview ~/.local/opt/tradingview
+tvmod install --app ~/.local/opt/tradingview/tradingview
+tvmod patch --yes
+```
+
+Then start TradingView normally. The embedded preload runs from the app itself. All launchers for that copy now use the patch; `tvmod unpatch --yes` restores the verified backup.
+
+Notes:
+
+- A 305 MB copy is required; updates to the copy are manual (`cp` the new app, then `tvmod repair --yes`).
+- Root-owned system installs are deliberately refused in v0.1.0 rather than silently elevating.
+- Snap installs are read-only and cannot be patched.
+- Backups and hashes live in `~/.local/share/tvmod/backups` and `~/.config/tvmod/state.json`.
+- The patch is applied by extracting the ASAR, appending an inline copy of the preload to the host preload, and repacking with unpacked native modules preserved. It does not depend on a separate `require()` of a file inside the sandboxed preload.
 
 ## How it works
 
@@ -94,12 +127,15 @@ preload.js
 
 The preload runs in Electron’s renderer preload context. Mods never receive Node.js access; the only privileged code is the small launcher bootstrap.
 
+In patch mode, the same preload bundle is appended to `preload/target-tvd-host-preload.js` inside the ASAR, wrapped in an IIFE. The host preload is sandboxed, so embedding the code is more reliable than trying to `require()` a second file from inside it.
+
 ## Safety and scope
 
 - TVMod is **unofficial** and not affiliated with TradingView.
 - No paywall, trial, entitlement, or account data is touched. Paywall/trial feature flags are intentionally left alone.
 - Promo suppression may conflict with TradingView’s terms of service. Use at your own discretion.
 - The launcher briefly opens a loopback inspector. It binds to `127.0.0.1` on a random port, verifies the spawned PID, and closes the inspector after bootstrap.
+- Patch mode modifies `app.asar` after confirmation, keeps a verified backup, and refuses non-writable or Snap installs.
 - No telemetry, analytics, or remote code loading.
 - Do not redistribute TradingView binaries, bundles, or assets. The patch backend never publishes a patched app.
 
@@ -108,7 +144,7 @@ See [SECURITY.md](SECURITY.md) and [docs/PATCHING.md](docs/PATCHING.md).
 ## Development
 
 ```sh
-npm run build       # dist/cli.cjs + dist/preload.cjs
+npm run build       # dist/cli.mjs + dist/preload.cjs
 npm run typecheck
 npm test
 ```
@@ -117,11 +153,11 @@ Layout:
 
 ```
 src/cli.ts             command dispatcher
-src/commands/          install, launch, doctor, uninstall, patch placeholders
-src/lib/               app detection, inspector client, desktop integration, state
+src/commands/          install, launch, doctor, uninstall, patch/repair/unpatch
+src/lib/               app detection, inspector client, desktop integration, state, ASAR patching
 src/preload.ts         Electron preload entry
 src/core/              boot filters, CSS, DOM cleanup, panel, settings
-test/                  unit tests for pure logic and boot filters
+test/                  unit tests for pure logic, boot filters, and ASAR patching
 docs/                  architecture and patch design
 ```
 
@@ -131,7 +167,8 @@ docs/                  architecture and patch design
 - [x] Early boot filters and DOM cleanup
 - [x] Mod panel and persisted settings
 - [x] User-level desktop override
-- [ ] Vencord-style optional ASAR patch backend with backup/repair/unpatch
+- [x] Optional patch backend for user-writable installs/copies with backup/repair/unpatch
+- [ ] Root-owned in-place patching with explicit elevation
 - [ ] Snap validation (inspect binding and preload readability under confinement)
 - [ ] Signed release artifacts and scheduled web census
 - [ ] Windows/macOS launcher

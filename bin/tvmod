@@ -3,9 +3,9 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-if [ ! -f "$ROOT/dist/cli.cjs" ]; then
-  echo "tvmod: dist/cli.cjs not found; run 'npm run build' first" >&2
+if [ ! -f "$ROOT/dist/cli.mjs" ]; then
+  echo "tvmod: dist/cli.mjs not found; run 'npm run build' first" >&2
   exit 1
 fi
 
-exec node "$ROOT/dist/cli.cjs" "$@"
+exec node "$ROOT/dist/cli.mjs" "$@"

@@ -23,9 +23,9 @@ const common = {
 await build({
   ...common,
   entryPoints: [path.join(root, 'src/cli.ts')],
-  outfile: path.join(outdir, 'cli.cjs'),
+  outfile: path.join(outdir, 'cli.mjs'),
   platform: 'node',
-  format: 'cjs',
+  format: 'esm',
   target: 'node20',
 });
 
@@ -39,5 +39,5 @@ await build({
   external: ['electron'],
 });
 
-fs.chmodSync(path.join(outdir, 'cli.cjs'), 0o755);
+fs.chmodSync(path.join(outdir, 'cli.mjs'), 0o755);
 console.log(`tvmod ${pkg.version} built in dist/`);

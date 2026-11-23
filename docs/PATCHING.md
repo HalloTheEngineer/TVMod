@@ -1,6 +1,6 @@
-# Patch backend design (planned)
+# Patch backend
 
-Status: **not implemented in v0.1.0**. The launcher backend is the default and tested path. The patch backend is for users who explicitly want the official icon to run a modified `app.asar`, similar to how Vencord patches Discord.
+Status: **implemented in v0.1.0 for user-writable installs/copies**. It is optional; the launcher remains the default and the only mode tested against the root-owned AUR install.
 
 ## Why it is optional
 
@@ -10,42 +10,48 @@ TradingView Desktop on Linux is commonly installed as:
 - the official Snap (read-only mount), or
 - a tarball under `/opt/TradingView` (root-owned).
 
-The AUR package is replaced on every package update. The official Snap cannot be modified at all. Patching therefore requires root, is wiped by updates, and must be repaired. The launcher avoids all three problems.
+The AUR package is replaced on every package update. The official Snap cannot be modified at all. Patching therefore needs write access, is wiped by updates, and must be repaired. The launcher avoids all three problems.
 
-## Planned patch point
+v0.1.0 deliberately refuses root-owned installs instead of silently elevating. Use the launcher, or copy the app into a user-owned directory:
+
+```sh
+cp -a /usr/lib/tradingview ~/.local/opt/tradingview
+tvmod install --app ~/.local/opt/tradingview/tradingview
+tvmod patch --yes
+```
+
+## Mechanism
 
 1. Locate `resources/app.asar`.
-2. Back it up to `~/.local/share/tvmod/backups/`.
-3. Add `preload/tvmod-preload.js` to the ASAR.
-4. Prepend a require to the existing host preload:
+2. Back it up to `~/.local/share/tvmod/backups/app-<version>-<hash>.asar` and verify the hash.
+3. Extract the ASAR with `@electron/asar`.
+4. Append the built preload bundle to `preload/target-tvd-host-preload.js`, wrapped in an IIFE and marked with `TVMOD_PRELOAD_START` / `TVMOD_PRELOAD_END`.
+5. Repack with `unpack: '**/*.node'` and verify:
+   - `package.json` still parses and the version is unchanged;
+   - the marker is present;
+   - generated native modules exist in the installed `app.asar.unpacked`.
+6. Replace `app.asar` atomically after a write-permission check.
+7. Record `{ appVersion, originalHash, patchedHash, backupPath, patchedAt }` in `~/.config/tvmod/state.json`.
 
-   ```js
-   require('./tvmod-preload.js');
-   ```
-
-   The file name (`preload/target-tvd-host-preload.js`) should be discovered from the ASAR rather than hard-coded. A fallback is to change `package.json` `"main"` to a wrapper that patches `Session.prototype.setPreloads` before `require('./index.js')`.
-
-5. Write the modified ASAR atomically, preserving permissions and unpacked native modules.
-6. Record `{ appVersion, originalHash, patchedHash, backupPath }` in `~/.config/tvmod/state.json`.
+The preload is embedded rather than `require()`d from a second file because the host preload runs sandboxed and cannot load arbitrary relative files.
 
 ## Repair and uninstall
 
-- `tvmod repair`: if the current ASAR hash no longer matches `patchedHash`, the app updated; reapply the patch to the new ASAR after a compatibility check.
-- `tvmod unpatch`: restore the backup only if the current ASAR still matches `patchedHash`. Otherwise offer to reinstall the app rather than clobbering a newer version.
-- Never silently elevate. `tvmod patch` must show the target path and ask before using `pkexec`/`sudo`.
-- Snap installs are rejected with an explanation: the snap mount is read-only.
+- `tvmod repair --yes`: if the current ASAR hash no longer matches `patchedHash`, the app updated; back up the current ASAR and re-apply the patch.
+- `tvmod unpatch --yes`: restore the backup only if the current ASAR still matches `patchedHash`. If the app updated and no patch is detected, clear the stale state. If the file changed but still contains the marker, refuse and ask for a reinstall.
+- Patch/repair/unpatch require `--yes` and stop the target install first (`--restart` is explicit).
 
 ## Test plan
 
-- Synthetic ASAR fixtures for read/write/offset behavior.
-- Patch a copy of the real `app.asar`; verify `unpatch` is byte-identical.
-- Launch the patched copy in a disposable profile and assert the panel appears.
-- Test repair across two synthetic versions.
-- Test permission-denied, read-only, and Snap paths.
+- Synthetic ASAR fixture: patch, verify, install, restore, verify byte-identical. This runs in CI.
+- Copy of the real 3.5.0 app: patch, launch, verify `window.__TVMOD_ACTIVE__`, panel, and promo filters; then unpatch and verify the original hash. This was validated manually on 3.5.0.
+- Repair across a simulated update: restore the original ASAR, run `repair`, verify the new patched hash.
+- Permission-denied and Snap paths are refused.
 
-## Risks
+## Limitations and future work
 
-- ASAR layout changes between desktop releases.
-- macOS app signature invalidation (not in Linux v1).
-- Package-manager updates overwrite the patch.
-- A broken patch can prevent the app from starting; backups and a `tvmod repair` path are mandatory.
+- Root-owned `/usr/lib` installs are refused in v0.1.0. A future release can offer explicit `sudo`/`pkexec` elevation with ownership-safe path handling.
+- The patch is lost when a package manager replaces the app; `tvmod repair --yes` is required.
+- macOS is not supported; modifying a signed app bundle can invalidate its signature.
+- Official Snap installs are read-only.
+- A broken patch can prevent the app from starting; backups and `tvmod unpatch` are mandatory.

@@ -19,7 +19,9 @@ Usage:
   tvmod launch [options]
   tvmod doctor [--app <path>]
   tvmod uninstall [--purge]
-  tvmod patch | repair | unpatch     (not implemented yet)
+  tvmod patch [--app <path>] [--restart] --yes
+  tvmod repair [--app <path>] [--restart] --yes
+  tvmod unpatch [--app <path>] [--restart] --yes
 
 Launch options:
   --app <path>            override the detected TradingView executable
@@ -33,6 +35,11 @@ Launch options:
 
 Install options:
   --app <path>            override the detected TradingView executable
+
+Patch options:
+  --app <path>            override the detected TradingView executable
+  --restart               close TradingView before modifying app.asar
+  --yes                   required confirmation for patch/repair/unpatch
 
 Other:
   -h, --help              show this help
@@ -58,6 +65,7 @@ async function run(): Promise<void> {
       timeout: { type: 'string' },
       verbose: { type: 'boolean', default: false },
       purge: { type: 'boolean', default: false },
+      yes: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -114,15 +122,27 @@ async function run(): Promise<void> {
       return;
 
     case 'patch':
-      patchCommand();
+      await patchCommand({
+        app,
+        restart: Boolean(values.restart),
+        yes: Boolean(values.yes),
+      });
       return;
 
     case 'repair':
-      repairCommand();
+      await repairCommand({
+        app,
+        restart: Boolean(values.restart),
+        yes: Boolean(values.yes),
+      });
       return;
 
     case 'unpatch':
-      unpatchCommand();
+      await unpatchCommand({
+        app,
+        restart: Boolean(values.restart),
+        yes: Boolean(values.yes),
+      });
       return;
 
     default:
