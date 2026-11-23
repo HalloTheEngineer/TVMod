@@ -37,6 +37,27 @@ jobs:
       - run: sha256sum -c SHA256SUMS
         working-directory: release
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL="$(ls release/*.tar.gz)"
+          cosign sign-blob --yes --bundle "${TARBALL}.sigstore.json" "${TARBALL}"
+          cosign sign-blob --yes --bundle release/SHA256SUMS.sigstore.json release/SHA256SUMS
+
+      - name: Verify release signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL="$(ls release/*.tar.gz)"
+          IDENTITY="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
+          ISSUER="https://token.actions.githubusercontent.com"
+          cosign verify-blob --bundle "${TARBALL}.sigstore.json" --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" "${TARBALL}"
+          cosign verify-blob --bundle release/SHA256SUMS.sigstore.json --certificate-identity "${IDENTITY}" --certificate-oidc-issuer "${ISSUER}" release/SHA256SUMS
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -47,4 +68,5 @@ jobs:
           files: |
             release/*.tar.gz
             release/SHA256SUMS
+            release/*.sigstore.json
           generate_release_notes: true
