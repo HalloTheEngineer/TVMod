@@ -4,6 +4,13 @@ import { doctorCommand } from './commands/doctor.js';
 import { installCommand } from './commands/install.js';
 import { launchCommand } from './commands/launch.js';
 import { patchCommand, repairCommand, unpatchCommand } from './commands/patch.js';
+import {
+  pluginAddCommand,
+  pluginListCommand,
+  pluginPathCommand,
+  pluginRefreshCommand,
+  pluginRemoveCommand,
+} from './commands/plugin.js';
 import { uninstallCommand } from './commands/uninstall.js';
 import { UserError } from './lib/errors.js';
 import {
@@ -23,6 +30,11 @@ Usage:
   tvmod patch [--app <path>] [--restart] --yes
   tvmod repair [--app <path>] [--restart] --yes
   tvmod unpatch [--app <path>] [--restart] --yes
+  tvmod plugin add <dir> [--force]
+  tvmod plugin list
+  tvmod plugin remove <id> --yes
+  tvmod plugin refresh
+  tvmod plugin path
 
 Launch options:
   --app <path>            override the detected TradingView executable
@@ -40,7 +52,10 @@ Install options:
 Patch options:
   --app <path>            override the detected TradingView executable
   --restart               close TradingView before modifying app.asar
-  --yes                   required confirmation for patch/repair/unpatch
+  --yes                   required confirmation for patch/repair/unpatch/plugin remove
+
+Plugin options:
+  --force                 replace an existing plugin with the same id
 
 Other:
   -h, --help              show this help
@@ -67,6 +82,7 @@ async function run(): Promise<void> {
       verbose: { type: 'boolean', default: false },
       purge: { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
+      force: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -145,6 +161,30 @@ async function run(): Promise<void> {
         yes: Boolean(values.yes),
       });
       return;
+
+    case 'plugin': {
+      const subcommand = positionals[1] ?? 'list';
+      const arg = positionals[2];
+      switch (subcommand) {
+        case 'add':
+          pluginAddCommand(arg, { force: Boolean(values.force) });
+          return;
+        case 'list':
+          pluginListCommand();
+          return;
+        case 'remove':
+          pluginRemoveCommand(arg, { yes: Boolean(values.yes) });
+          return;
+        case 'refresh':
+          pluginRefreshCommand();
+          return;
+        case 'path':
+          pluginPathCommand();
+          return;
+        default:
+          throw new UserError(`unknown plugin subcommand: ${subcommand}`);
+      }
+    }
 
     default:
       fail(`unknown command: ${command}`);

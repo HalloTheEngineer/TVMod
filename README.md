@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop** on Linux.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.2.0, launcher + optional patch backend**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
+> Status: **v0.3.0, launcher + optional patch backend + local plugin SDK**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
 
 ## Features
 
@@ -13,6 +13,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Hide sidebar** — optional; removes the right widget bar.
 - **Config button** — a gear button inside the chart opens a Vencord-style plugin modal; `Ctrl+Shift+M` also works.
 - **Individual plugins** — toggle Adblock, Hide AI Copilot, Hide Community Hub, and Hide Sidebar independently.
+- **Local plugin SDK** — install single-file plugins with a manifest, permissions, boolean settings, and lifecycle cleanup.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
 - **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
@@ -32,7 +33,7 @@ Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Rel
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf tvmod-0.2.0-linux-x64.tar.gz
+tar -xzf tvmod-0.3.0-linux-x64.tar.gz
 cd tvmod-0.2.0-linux-x64
 ./tvmod install
 ```
@@ -42,7 +43,7 @@ Then close TradingView and start it from your normal icon. The release binary do
 To verify the GitHub build provenance:
 
 ```sh
-gh attestation verify tvmod-0.2.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.3.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 ## Install from source
@@ -83,6 +84,11 @@ tvmod uninstall [--purge]        remove the desktop entries, wrapper, and state
 tvmod patch --yes                embed the preload into a user-writable app.asar
 tvmod repair --yes               re-apply the patch after an app update
 tvmod unpatch --yes              restore the original app.asar
+tvmod plugin add <dir> [--force] install or replace a local plugin
+tvmod plugin list                list local plugins
+tvmod plugin remove <id> --yes   remove a plugin
+tvmod plugin refresh             recompose the installed preload
+tvmod plugin path                print the plugin directory
 ```
 
 Patch options:
@@ -123,7 +129,7 @@ Then start TradingView normally. The embedded preload runs from the app itself. 
 Notes:
 
 - A 305 MB copy is required; updates to the copy are manual (`cp` the new app, then `tvmod repair --yes`).
-- Root-owned system installs are deliberately refused in v0.2.0 rather than silently elevating.
+- Root-owned system installs are deliberately refused in v0.3.0 rather than silently elevating.
 - Snap installs are read-only and cannot be patched.
 - Backups and hashes live in `~/.local/share/tvmod/backups` and `~/.config/tvmod/state.json`.
 - The patch is applied by extracting the ASAR, appending an inline copy of the preload to the host preload, and repacking with unpacked native modules preserved. It does not depend on a separate `require()` of a file inside the sandboxed preload.
@@ -140,6 +146,18 @@ The gear button opens a modal with individual plugin toggles:
 | Hide Sidebar | off | Hides the right watchlist/details sidebar. |
 
 The modal includes search, a reload banner when a boot-time plugin changes, and **Reset defaults**. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
+
+### Local plugins
+
+External plugins live in `~/.local/share/tvmod/plugins/<id>/` with a `manifest.json` and a single JavaScript entry file. Install the bundled example:
+
+```sh
+tvmod plugin add examples/plugins/hello-world
+```
+
+Reload the TradingView page and enable **Hello World** in the gear modal. It demonstrates a badge, a boolean setting, permissions, storage, and cleanup. See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) for the manifest and API.
+
+External plugins are embedded into the installed preload at install/add/refresh time. For a patched install, run `tvmod repair --yes` after changing plugins.
 
 ## How it works
 
@@ -160,7 +178,7 @@ preload.js
   └─ shadow-DOM panel: settings and toggle controls
 ```
 
-The preload runs in Electron’s renderer preload context. Mods never receive Node.js access; the only privileged code is the small launcher bootstrap.
+The preload runs in Electron’s renderer preload context. Built-in cleanup never receives Node.js access. External plugins receive only the capability context described in [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md); the privileged code is the small launcher/bootstrap and preload host.
 
 In patch mode, the same preload bundle is appended to `preload/target-tvd-host-preload.js` inside the ASAR, wrapped in an IIFE. The host preload is sandboxed, so embedding the code is more reliable than trying to `require()` a second file from inside it.
 
@@ -193,9 +211,11 @@ src/cli.ts             command dispatcher
 src/commands/          install, launch, doctor, uninstall, patch/repair/unpatch
 src/lib/               app detection, inspector client, desktop integration, state, ASAR patching
 src/preload.ts         Electron preload entry
-src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, panel
-test/                  unit tests for pure logic, boot filters, and ASAR patching
-docs/                  architecture and patch design
+src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, plugin host, panel
+src/lib/plugin-files.ts plugin validation, embedding, and CLI plugin install
+examples/plugins/      example external plugin
+test/                  unit tests for logic, boot filters, plugins, and ASAR patching
+docs/                  architecture, plugin SDK, and patch design
 ```
 
 ## Roadmap
@@ -204,13 +224,14 @@ docs/                  architecture and patch design
 - [x] Early boot filters and DOM cleanup
 - [x] Mod panel and persisted settings
 - [x] Vencord-style plugin list with individual toggles and search
+- [x] Local plugin SDK v1 with manifest, permissions, settings, and lifecycle
 - [x] User-level desktop override
 - [x] Optional patch backend for user-writable installs/copies with backup/repair/unpatch
 - [ ] Root-owned in-place patching with explicit elevation
 - [ ] Snap validation (inspect binding and preload readability under confinement)
 - [ ] Signed release artifacts and scheduled web census
 - [ ] Windows/macOS launcher
-- [ ] Third-party mod manifest API
+- [ ] Remote/signed plugin registry and hot reload
 
 ## License
 

@@ -1,0 +1,18 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "description": "Adds a small example badge to the page and demonstrates plugin lifecycle, settings, permissions, and storage.",
+  "version": "1.0.0",
+  "author": "TVMod",
+  "main": "index.js",
+  "defaultEnabled": false,
+  "permissions": ["dom", "style", "storage"],
+  "settings": [
+    {
+      "key": "showBadge",
+      "name": "Show example badge",
+      "description": "Display a small TVMod example badge in the chart.",
+      "default": true
+    }
+  ]
+}

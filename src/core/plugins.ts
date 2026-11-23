@@ -1,17 +1,6 @@
-export interface PluginDefinition {
-  id: string;
-  name: string;
-  description: string;
-  defaultEnabled: boolean;
-  /**
-   * True when toggling the plugin also changes data that is applied before
-   * page scripts run (offers, feature flags); a reload is needed for the full
-   * effect.
-   */
-  requiresReload?: boolean;
-}
+import type { PanelPlugin } from './plugin-types.js';
 
-export const PLUGINS: PluginDefinition[] = [
+export const PLUGINS: PanelPlugin[] = [
   {
     id: 'adblock',
     name: 'Adblock',
@@ -40,6 +29,10 @@ export const PLUGINS: PluginDefinition[] = [
   },
 ];
 
-export function getPlugin(id: string): PluginDefinition | undefined {
+export function getPlugin(id: string): PanelPlugin | undefined {
   return PLUGINS.find((plugin) => plugin.id === id);
+}
+
+export function isBuiltinPluginId(id: string): boolean {
+  return PLUGINS.some((plugin) => plugin.id === id);
 }

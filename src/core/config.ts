@@ -1,7 +1,9 @@
+import type { PanelPlugin, PluginSettingDefinition } from './plugin-types.js';
 import { PLUGINS } from './plugins.js';
 
 export interface PluginState {
   enabled: boolean;
+  settings?: Record<string, boolean>;
 }
 
 export interface TvmodConfig {
@@ -17,37 +19,71 @@ export interface StorageLike {
 export const CONFIG_KEY = 'tvmod.config.v2';
 export const LEGACY_SETTINGS_KEY = 'tvmod.settings.v1';
 
-export function defaultConfig(): TvmodConfig {
+function defaultsFor(
+  settings: PluginSettingDefinition[] | undefined
+): Record<string, boolean> | undefined {
+  if (!settings || settings.length === 0) return undefined;
+  return Object.fromEntries(settings.map((setting) => [setting.key, setting.default]));
+}
+
+function makeState(plugin: PanelPlugin): PluginState {
+  const state: PluginState = { enabled: plugin.defaultEnabled };
+  const settings = defaultsFor(plugin.settings);
+  if (settings) state.settings = settings;
+  return state;
+}
+
+export function defaultConfig(defs: PanelPlugin[] = PLUGINS): TvmodConfig {
   return {
     version: 2,
-    plugins: Object.fromEntries(
-      PLUGINS.map((plugin) => [plugin.id, { enabled: plugin.defaultEnabled }])
-    ),
+    plugins: Object.fromEntries(defs.map((plugin) => [plugin.id, makeState(plugin)])),
   };
 }
 
-export function normalizeConfig(input: unknown): TvmodConfig {
-  const config = defaultConfig();
+export function normalizeConfig(
+  input: unknown,
+  defs: PanelPlugin[] = PLUGINS
+): TvmodConfig {
+  const config = defaultConfig(defs);
   if (!input || typeof input !== 'object') return config;
 
   const raw = input as { plugins?: unknown };
   if (!raw.plugins || typeof raw.plugins !== 'object') return config;
 
   const plugins = raw.plugins as Record<string, unknown>;
-  for (const plugin of PLUGINS) {
-    const entry = plugins[plugin.id];
+  for (const [id, entry] of Object.entries(plugins)) {
     if (!entry || typeof entry !== 'object') continue;
-    const enabled = (entry as { enabled?: unknown }).enabled;
-    if (typeof enabled === 'boolean') {
-      config.plugins[plugin.id] = { enabled };
+    const value = entry as { enabled?: unknown; settings?: unknown };
+    if (typeof value.enabled !== 'boolean') continue;
+
+    const state: PluginState = { enabled: value.enabled };
+    if (value.settings && typeof value.settings === 'object') {
+      const settings: Record<string, boolean> = {};
+      for (const [key, setting] of Object.entries(value.settings)) {
+        if (typeof setting === 'boolean') settings[key] = setting;
+      }
+      if (Object.keys(settings).length > 0) state.settings = settings;
     }
+    config.plugins[id] = state;
+  }
+
+  for (const plugin of defs) {
+    const state = config.plugins[plugin.id] ?? makeState(plugin);
+    const defaults = defaultsFor(plugin.settings);
+    if (defaults) {
+      state.settings = { ...defaults, ...(state.settings ?? {}) };
+    }
+    config.plugins[plugin.id] = state;
   }
 
   return config;
 }
 
-export function migrateLegacySettings(input: unknown): TvmodConfig {
-  const config = defaultConfig();
+export function migrateLegacySettings(
+  input: unknown,
+  defs: PanelPlugin[] = PLUGINS
+): TvmodConfig {
+  const config = defaultConfig(defs);
   if (!input || typeof input !== 'object') return config;
 
   const legacy = input as {
@@ -78,24 +114,31 @@ function getStorage(): StorageLike | null {
   }
 }
 
-export function loadConfig(storage?: StorageLike | null): TvmodConfig {
+export function loadConfig(
+  storage?: StorageLike | null,
+  defs: PanelPlugin[] = PLUGINS
+): TvmodConfig {
   try {
     const store = storage ?? getStorage();
-    if (!store) return defaultConfig();
+    if (!store) return defaultConfig(defs);
 
     const raw = store.getItem(CONFIG_KEY);
-    if (raw) return normalizeConfig(JSON.parse(raw));
+    if (raw) return normalizeConfig(JSON.parse(raw), defs);
 
     const legacy = store.getItem(LEGACY_SETTINGS_KEY);
     if (legacy) {
-      const migrated = migrateLegacySettings(JSON.parse(legacy));
-      saveConfigTo(store, migrated);
+      const migrated = migrateLegacySettings(JSON.parse(legacy), defs);
+      try {
+        store.setItem(CONFIG_KEY, JSON.stringify(migrated));
+      } catch {
+        // Storage may be unavailable; the migrated value is still returned.
+      }
       return migrated;
     }
 
-    return defaultConfig();
+    return defaultConfig(defs);
   } catch {
-    return defaultConfig();
+    return defaultConfig(defs);
   }
 }
 
@@ -106,18 +149,10 @@ export function saveConfig(
   try {
     const store = storage ?? getStorage();
     if (!store) return false;
-    store.setItem(CONFIG_KEY, JSON.stringify(normalizeConfig(config)));
+    store.setItem(CONFIG_KEY, JSON.stringify(config));
     return true;
   } catch {
     return false;
-  }
-}
-
-function saveConfigTo(store: StorageLike, config: TvmodConfig): void {
-  try {
-    store.setItem(CONFIG_KEY, JSON.stringify(normalizeConfig(config)));
-  } catch {
-    // Storage may be unavailable; the migrated value is still returned.
   }
 }
 
@@ -130,11 +165,41 @@ export function withPluginEnabled(
   id: string,
   enabled: boolean
 ): TvmodConfig {
-  return normalizeConfig({
+  const current = config.plugins[id];
+  return {
     version: 2,
     plugins: {
       ...config.plugins,
-      [id]: { enabled },
+      [id]: { ...(current ?? {}), enabled },
     },
-  });
+  };
+}
+
+export function withPluginSetting(
+  config: TvmodConfig,
+  id: string,
+  key: string,
+  value: boolean
+): TvmodConfig {
+  const current = config.plugins[id];
+  return {
+    version: 2,
+    plugins: {
+      ...config.plugins,
+      [id]: {
+        ...(current ?? { enabled: false }),
+        settings: { ...(current?.settings ?? {}), [key]: value },
+      },
+    },
+  };
+}
+
+export function getPluginSettings(
+  config: TvmodConfig,
+  plugin: PanelPlugin
+): Record<string, boolean> {
+  return {
+    ...(defaultsFor(plugin.settings) ?? {}),
+    ...(config.plugins[plugin.id]?.settings ?? {}),
+  };
 }

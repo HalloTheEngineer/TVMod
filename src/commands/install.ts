@@ -7,6 +7,7 @@ import {
 } from '../lib/app-detect.js';
 import { writeDesktopEntries, writeWrapper } from '../lib/desktop.js';
 import { UserError } from '../lib/errors.js';
+import { writeInstalledPreload } from '../lib/plugin-files.js';
 import {
   displayPath,
   ensureDir,
@@ -51,8 +52,7 @@ export function installCommand(options: InstallOptions): void {
   ensureDir(stateDir);
   ensureDir(logsDir);
 
-  fs.copyFileSync(source, preloadTarget);
-  fs.chmodSync(preloadTarget, 0o644);
+  const pluginResult = writeInstalledPreload();
 
   const wrapper = writeWrapper(process.argv[1] ?? source);
   const entries = writeDesktopEntries(install, wrapper);
@@ -96,7 +96,12 @@ export function installCommand(options: InstallOptions): void {
   label('preload', displayPath(preloadTarget));
   label('wrapper', displayPath(wrapperPath));
   label('desktop', displayPath(entries.desktop));
+  label('external plugins', String(pluginResult.count));
   label('preload sha256', sha256File(preloadTarget).slice(0, 16));
+
+  for (const error of pluginResult.errors) {
+    warn(`plugin ${error.id}: ${error.message}`);
+  }
 
   const pids = tradingViewPids();
   if (pids.length > 0) {

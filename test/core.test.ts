@@ -10,6 +10,7 @@ import {
   migrateLegacySettings,
   normalizeConfig,
   withPluginEnabled,
+  withPluginSetting,
 } from '../src/core/config.js';
 import { inferFlavor } from '../src/lib/app-detect.js';
 import { parseInspectorUrl, quoteDesktopArg } from '../src/lib/util.js';
@@ -21,7 +22,7 @@ test('parseInspectorUrl extracts the websocket url', () => {
   assert.equal(parseInspectorUrl('nothing here'), null);
 });
 
-test('normalizeConfig keeps defaults and drops unknown plugin ids', () => {
+test('normalizeConfig keeps defaults and preserves external plugin state', () => {
   assert.deepEqual(normalizeConfig(null), defaultConfig());
 
   const config = normalizeConfig({
@@ -34,7 +35,37 @@ test('normalizeConfig keeps defaults and drops unknown plugin ids', () => {
 
   assert.equal(isPluginEnabled(config, 'adblock'), false);
   assert.equal(isPluginEnabled(config, 'hide-ai-copilot'), true);
-  assert.equal('not-a-plugin' in config.plugins, false);
+  assert.equal(isPluginEnabled(config, 'not-a-plugin'), true);
+});
+
+test('normalizeConfig merges external plugin settings with defaults', () => {
+  const external = {
+    id: 'external',
+    name: 'External',
+    description: 'test',
+    defaultEnabled: false,
+    external: true,
+    settings: [{ key: 'foo', name: 'Foo', default: true }],
+  };
+
+  const config = normalizeConfig(
+    {
+      version: 2,
+      plugins: {
+        external: { enabled: true, settings: { foo: false } },
+      },
+    },
+    [external]
+  );
+
+  assert.equal(isPluginEnabled(config, 'external'), true);
+  assert.equal(config.plugins.external?.settings?.foo, false);
+});
+
+test('withPluginSetting preserves the enabled state', () => {
+  const config = withPluginSetting(defaultConfig(), 'adblock', 'foo', true);
+  assert.equal(isPluginEnabled(config, 'adblock'), true);
+  assert.equal(config.plugins.adblock?.settings?.foo, true);
 });
 
 test('legacy flat settings migrate to plugin state', () => {

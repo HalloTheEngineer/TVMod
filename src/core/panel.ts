@@ -2,24 +2,17 @@ import {
   defaultConfig,
   isPluginEnabled,
   withPluginEnabled,
+  withPluginSetting,
   type TvmodConfig,
 } from './config.js';
-import { PLUGINS, type PluginDefinition } from './plugins.js';
+import type { PanelPlugin } from './plugin-types.js';
 
 const PANEL_ID = 'tvmod-root';
 
 const PANEL_STYLE = `
-  :host {
-    all: initial;
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-
-  [hidden] {
-    display: none !important;
-  }
+  :host { all: initial; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
 
   .fab {
     pointer-events: auto;
@@ -39,289 +32,145 @@ const PANEL_STYLE = `
     cursor: pointer;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   }
-
-  .fab:hover {
-    background: #1d2229;
-  }
-
-  .fab svg {
-    width: 18px;
-    height: 18px;
-  }
-
+  .fab:hover { background: #1d2229; }
+  .fab svg { width: 18px; height: 18px; }
   .dot {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #ff8a3d;
-    box-shadow: 0 0 0 2px #14171b;
+    position: absolute; top: 5px; right: 5px; width: 7px; height: 7px;
+    border-radius: 50%; background: #ff8a3d; box-shadow: 0 0 0 2px #14171b;
   }
 
   .backdrop {
-    pointer-events: auto;
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(2px);
+    pointer-events: auto; position: fixed; inset: 0; z-index: 10;
+    background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(2px);
   }
 
   .modal {
-    pointer-events: auto;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 11;
-    display: flex;
-    flex-direction: column;
-    width: min(460px, calc(100vw - 32px));
-    max-height: min(640px, 82vh);
-    overflow: hidden;
-    border: 1px solid #3a3f46;
-    border-radius: 14px;
-    background: #14171b;
+    pointer-events: auto; position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); z-index: 11;
+    display: flex; flex-direction: column;
+    width: min(480px, calc(100vw - 32px));
+    max-height: min(680px, 82vh); overflow: hidden;
+    border: 1px solid #3a3f46; border-radius: 14px; background: #14171b;
     color: #e9ecef;
     font: 12px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
   }
 
   .header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 15px 16px 10px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; padding: 15px 16px 10px;
   }
-
-  .title {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-  }
-
-  .subtitle {
-    margin-top: 2px;
-    color: #8f98a3;
-    font-size: 11px;
-  }
-
+  .title { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.2px; }
+  .subtitle { margin-top: 2px; color: #8f98a3; font-size: 11px; }
   .close {
-    flex: none;
-    width: 26px;
-    height: 26px;
-    border: 1px solid #3a3f46;
-    border-radius: 8px;
-    background: #1d2229;
-    color: #cfd5dc;
-    font: 18px/1 ui-sans-serif, system-ui, sans-serif;
-    cursor: pointer;
+    flex: none; width: 26px; height: 26px; border: 1px solid #3a3f46;
+    border-radius: 8px; background: #1d2229; color: #cfd5dc;
+    font: 18px/1 ui-sans-serif, system-ui, sans-serif; cursor: pointer;
   }
-
-  .close:hover {
-    background: #262c34;
-  }
+  .close:hover { background: #262c34; }
 
   .toolbar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    padding: 0 16px 10px;
+    display: flex; gap: 8px; align-items: center; padding: 0 16px 10px;
   }
-
   .search {
-    flex: 1;
-    min-width: 0;
-    padding: 7px 10px;
-    border: 1px solid #3a3f46;
-    border-radius: 8px;
-    background: #0f1216;
-    color: #e9ecef;
-    font: inherit;
-    outline: none;
+    flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid #3a3f46;
+    border-radius: 8px; background: #0f1216; color: #e9ecef;
+    font: inherit; outline: none;
   }
+  .search:focus { border-color: #4c8dff; }
+  .count { flex: none; color: #8f98a3; font-size: 11px; white-space: nowrap; }
 
-  .search:focus {
-    border-color: #4c8dff;
-  }
-
-  .count {
-    flex: none;
-    color: #8f98a3;
-    font-size: 11px;
-    white-space: nowrap;
-  }
-
-  .plugins {
-    min-height: 0;
-    overflow: auto;
-    padding: 0 10px 10px;
-  }
+  .plugins { min-height: 0; overflow: auto; padding: 0 10px 10px; }
 
   .plugin {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 11px 10px;
-    border: 1px solid transparent;
-    border-radius: 10px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 14px; padding: 11px 10px; border: 1px solid transparent; border-radius: 10px;
   }
+  .plugin + .plugin { margin-top: 2px; }
+  .plugin[data-enabled="true"] { border-color: #2b3138; background: #171b20; }
+  .plugin[data-error="true"] { border-color: #5b2b2b; background: #201616; }
 
-  .plugin + .plugin {
-    margin-top: 2px;
-  }
-
-  .plugin[data-enabled="true"] {
-    border-color: #2b3138;
-    background: #171b20;
-  }
-
-  .plugin-info {
-    min-width: 0;
-  }
-
+  .plugin-info { min-width: 0; flex: 1; }
   .plugin-name {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12.5px;
-    font-weight: 650;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-size: 12.5px; font-weight: 650;
   }
-
-  .plugin-desc {
-    margin-top: 3px;
-    color: #929ba6;
-    font-size: 11px;
-  }
+  .plugin-desc { margin-top: 3px; color: #929ba6; font-size: 11px; }
+  .plugin-meta { margin-top: 3px; color: #6f7883; font-size: 10px; }
 
   .badge {
-    padding: 1px 5px;
-    border: 1px solid #4b3a23;
-    border-radius: 4px;
-    background: #2a2117;
-    color: #ffb36b;
-    font-size: 9px;
-    font-weight: 650;
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
+    padding: 1px 5px; border: 1px solid #4b3a23; border-radius: 4px;
+    background: #2a2117; color: #ffb36b; font-size: 9px; font-weight: 650;
+    letter-spacing: 0.4px; text-transform: uppercase;
+  }
+  .badge.external { border-color: #28405a; background: #16222e; color: #8fc2ff; }
+  .badge.error {
+    border-color: #5b2b2b; background: #2a1616; color: #ff9b9b;
+    text-transform: none; letter-spacing: 0;
   }
 
   .switch {
-    flex: none;
-    position: relative;
-    display: inline-block;
-    width: 36px;
-    height: 20px;
-    margin-top: 2px;
-    cursor: pointer;
+    flex: none; position: relative; display: inline-block; width: 36px; height: 20px;
+    margin-top: 2px; cursor: pointer;
   }
-
-  .switch input {
-    position: absolute;
-    width: 0;
-    height: 0;
-    opacity: 0;
-  }
-
+  .switch input { position: absolute; width: 0; height: 0; opacity: 0; }
   .slider {
-    position: absolute;
-    inset: 0;
-    border-radius: 999px;
-    background: #30363e;
+    position: absolute; inset: 0; border-radius: 999px; background: #30363e;
     transition: background 120ms ease;
   }
-
   .slider::before {
-    content: "";
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #cfd5dc;
-    transition: transform 120ms ease;
+    content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
+    border-radius: 50%; background: #cfd5dc; transition: transform 120ms ease;
   }
+  .switch input:checked + .slider { background: #4c8dff; }
+  .switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+  .switch input:focus-visible + .slider { outline: 2px solid #4c8dff; outline-offset: 2px; }
 
-  .switch input:checked + .slider {
-    background: #4c8dff;
-  }
+  .switch.small { width: 30px; height: 16px; margin-top: 0; }
+  .switch.small .slider::before { top: 3px; left: 3px; width: 10px; height: 10px; }
+  .switch.small input:checked + .slider::before { transform: translateX(14px); }
 
-  .switch input:checked + .slider::before {
-    transform: translateX(16px);
-    background: #fff;
+  .plugin-settings {
+    margin-top: 7px; padding-top: 6px; border-top: 1px solid #262b32;
   }
+  .plugin-setting {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 3px 0; cursor: pointer;
+  }
+  .plugin-setting span { color: #b7c0c9; font-size: 11px; }
 
-  .switch input:focus-visible + .slider {
-    outline: 2px solid #4c8dff;
-    outline-offset: 2px;
-  }
-
-  .empty {
-    padding: 24px 12px;
-    color: #8f98a3;
-    text-align: center;
-  }
+  .plugin-error { margin-top: 6px; color: #ff9b9b; font-size: 10.5px; }
+  .empty { padding: 24px 12px; color: #8f98a3; text-align: center; }
 
   .reload {
-    margin: 0 16px 8px;
-    padding: 9px 10px;
-    border: 1px solid #4b3a23;
-    border-radius: 8px;
-    background: #201a13;
-    color: #ffcf9e;
-    font-size: 11px;
+    margin: 0 16px 8px; padding: 9px 10px; border: 1px solid #4b3a23;
+    border-radius: 8px; background: #201a13; color: #ffcf9e; font-size: 11px;
   }
-
   .reload button {
-    margin-left: 6px;
-    padding: 2px 7px;
-    border: 1px solid #5a4529;
-    border-radius: 5px;
-    background: #2a2117;
-    color: #ffcf9e;
-    font: inherit;
-    cursor: pointer;
+    margin-left: 6px; padding: 2px 7px; border: 1px solid #5a4529;
+    border-radius: 5px; background: #2a2117; color: #ffcf9e;
+    font: inherit; cursor: pointer;
   }
 
   .footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 10px 16px 13px;
-    border-top: 1px solid #262b32;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 10px 16px 13px; border-top: 1px solid #262b32;
   }
-
   .reset {
-    padding: 5px 9px;
-    border: 1px solid #3a3f46;
-    border-radius: 7px;
-    background: #1d2229;
-    color: #cfd5dc;
-    font: inherit;
-    cursor: pointer;
+    padding: 5px 9px; border: 1px solid #3a3f46; border-radius: 7px;
+    background: #1d2229; color: #cfd5dc; font: inherit; cursor: pointer;
   }
-
-  .reset:hover {
-    background: #262c34;
-  }
-
-  .hint {
-    color: #77808b;
-    font-size: 10px;
-  }
+  .reset:hover { background: #262c34; }
+  .hint { color: #77808b; font-size: 10px; }
 `;
 
 export interface PanelOptions {
   version: string;
+  plugins: PanelPlugin[];
   getConfig: () => TvmodConfig;
   setConfig: (config: TvmodConfig) => void;
+  defaultConfig: () => TvmodConfig;
+  getPluginError?: (id: string) => string | null;
 }
 
 export interface PanelHandle {
@@ -347,7 +196,10 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
   let config = options.getConfig();
   const initialEnabled = new Map(
-    PLUGINS.map((plugin) => [plugin.id, isPluginEnabled(config, plugin.id)])
+    options.plugins.map((plugin) => [
+      plugin.id,
+      isPluginEnabled(config, plugin.id),
+    ])
   );
 
   const host = document.createElement('div');
@@ -361,8 +213,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   shadow.innerHTML = `
     <style>${PANEL_STYLE}</style>
     <button class="fab" type="button" aria-label="Open TVMod plugins" title="TVMod plugins (Ctrl+Shift+M)">
-      ${gearSvg()}
-      <span class="dot" hidden></span>
+      ${gearSvg()}<span class="dot" hidden></span>
     </button>
     <div class="backdrop" hidden></div>
     <div class="modal" role="dialog" aria-modal="true" aria-label="TVMod plugins" hidden>
@@ -401,13 +252,30 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   if (version) version.textContent = `v${options.version}`;
   if (!list) return null;
 
-  const cards = new Map<string, { card: HTMLElement; input: HTMLInputElement }>();
+  const cards = new Map<
+    string,
+    {
+      card: HTMLElement;
+      input: HTMLInputElement;
+      settings: HTMLElement;
+      settingInputs: Map<string, HTMLInputElement>;
+      error: HTMLElement;
+      badges: HTMLElement;
+    }
+  >();
 
-  const buildCard = (plugin: PluginDefinition): HTMLElement => {
+  const buildCard = (plugin: PanelPlugin): HTMLElement => {
     const card = document.createElement('div');
     card.className = 'plugin';
     card.dataset.pluginId = plugin.id;
-    card.dataset.search = `${plugin.name} ${plugin.description}`.toLowerCase();
+    card.dataset.search = [
+      plugin.name,
+      plugin.description,
+      plugin.author ?? '',
+      ...(plugin.settings ?? []).map((setting) => setting.name),
+    ]
+      .join(' ')
+      .toLowerCase();
 
     const info = document.createElement('div');
     info.className = 'plugin-info';
@@ -415,18 +283,78 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     const name = document.createElement('div');
     name.className = 'plugin-name';
     name.append(document.createTextNode(plugin.name));
+
+    const badges = document.createElement('span');
+    badges.style.display = 'inline-flex';
+    badges.style.gap = '4px';
+    if (plugin.external) {
+      const badge = document.createElement('span');
+      badge.className = 'badge external';
+      badge.textContent = 'external';
+      badge.title = `${plugin.author ?? 'unknown author'} v${plugin.version ?? '0.0.0'}`;
+      badges.append(badge);
+    }
     if (plugin.requiresReload) {
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = 'reload';
-      name.append(badge);
+      badges.append(badge);
     }
+    name.append(badges);
 
     const desc = document.createElement('div');
     desc.className = 'plugin-desc';
     desc.textContent = plugin.description;
 
+    const meta = document.createElement('div');
+    meta.className = 'plugin-meta';
+    if (plugin.external) {
+      meta.textContent = `${plugin.author ?? 'unknown author'} · v${plugin.version ?? '0.0.0'}`;
+    }
+
+    const settings = document.createElement('div');
+    settings.className = 'plugin-settings';
+    const settingInputs = new Map<string, HTMLInputElement>();
+
+    for (const setting of plugin.settings ?? []) {
+      const row = document.createElement('label');
+      row.className = 'plugin-setting';
+
+      const text = document.createElement('span');
+      text.textContent = setting.name;
+      if (setting.description) text.title = setting.description;
+
+      const toggle = document.createElement('label');
+      toggle.className = 'switch small';
+
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('aria-label', setting.name);
+
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+
+      toggle.append(input, slider);
+      row.append(text, toggle);
+      settings.append(row);
+
+      input.addEventListener('change', (event) => {
+        event.stopPropagation();
+        config = withPluginSetting(config, plugin.id, setting.key, input.checked);
+        options.setConfig(config);
+        sync();
+      });
+
+      settingInputs.set(setting.key, input);
+    }
+
+    const error = document.createElement('div');
+    error.className = 'plugin-error';
+    error.hidden = true;
+
     info.append(name, desc);
+    if (meta.textContent) info.append(meta);
+    info.append(settings, error);
 
     const label = document.createElement('label');
     label.className = 'switch';
@@ -438,9 +366,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
     const slider = document.createElement('span');
     slider.className = 'slider';
-
     label.append(input, slider);
-    card.append(info, label);
 
     input.addEventListener('change', (event) => {
       event.stopPropagation();
@@ -449,11 +375,19 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       sync();
     });
 
-    cards.set(plugin.id, { card, input });
+    card.append(info, label);
+    cards.set(plugin.id, {
+      card,
+      input,
+      settings,
+      settingInputs,
+      error,
+      badges,
+    });
     return card;
   };
 
-  for (const plugin of PLUGINS) {
+  for (const plugin of options.plugins) {
     list.append(buildCard(plugin));
   }
 
@@ -464,7 +398,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   list.append(empty);
 
   const isBootDirty = (): boolean =>
-    PLUGINS.some(
+    options.plugins.some(
       (plugin) =>
         plugin.requiresReload &&
         isPluginEnabled(config, plugin.id) !== initialEnabled.get(plugin.id)
@@ -474,7 +408,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     const query = (search?.value ?? '').trim().toLowerCase();
     let visible = 0;
 
-    for (const plugin of PLUGINS) {
+    for (const plugin of options.plugins) {
       const entry = cards.get(plugin.id);
       if (!entry) continue;
       const matches = !query || entry.card.dataset.search?.includes(query);
@@ -488,16 +422,39 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   const sync = (): void => {
     let enabled = 0;
 
-    for (const plugin of PLUGINS) {
+    for (const plugin of options.plugins) {
       const entry = cards.get(plugin.id);
       if (!entry) continue;
+
       const on = isPluginEnabled(config, plugin.id);
       entry.input.checked = on;
       entry.card.dataset.enabled = on ? 'true' : 'false';
       if (on) enabled += 1;
+
+      const state = config.plugins[plugin.id];
+      for (const setting of plugin.settings ?? []) {
+        const input = entry.settingInputs.get(setting.key);
+        if (input) {
+          input.checked = state?.settings?.[setting.key] ?? setting.default;
+        }
+      }
+      entry.settings.hidden = !on || !(plugin.settings?.length ?? 0);
+
+      const errorText = options.getPluginError?.(plugin.id) ?? null;
+      entry.error.hidden = !errorText;
+      entry.error.textContent = errorText ?? '';
+      entry.card.dataset.error = errorText ? 'true' : 'false';
+      entry.badges.querySelector('.badge.error')?.remove();
+      if (errorText) {
+        const badge = document.createElement('span');
+        badge.className = 'badge error';
+        badge.textContent = 'error';
+        badge.title = errorText;
+        entry.badges.append(badge);
+      }
     }
 
-    if (count) count.textContent = `${enabled} / ${PLUGINS.length} enabled`;
+    if (count) count.textContent = `${enabled} / ${options.plugins.length} enabled`;
 
     const dirty = isBootDirty();
     if (dot) dot.hidden = !dirty;
@@ -532,11 +489,10 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
   closeButton?.addEventListener('click', () => setOpen(false));
   backdrop?.addEventListener('click', () => setOpen(false));
-
   search?.addEventListener('input', applyFilter);
 
   reset?.addEventListener('click', () => {
-    config = defaultConfig();
+    config = options.defaultConfig();
     options.setConfig(config);
     sync();
   });

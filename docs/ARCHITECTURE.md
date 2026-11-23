@@ -73,6 +73,20 @@ The preload reads this synchronously before installing the boot traps, so boot f
 
 A gear button at the bottom-right of TradingView opens the modal. `Ctrl+Shift+M` toggles it; search filters the plugin list; a reload banner appears when Adblock changes; **Reset defaults** restores the plugin defaults.
 
+### Local plugins
+
+External plugins live under `~/.local/share/tvmod/plugins/<id>/` (`manifest.json` + a single JavaScript entry). `tvmod plugin add`, `remove`, or `refresh` validates them and embeds `{ manifest, source }` objects at the top of the installed preload:
+
+```js
+globalThis.__TVMOD_EXTERNAL_PLUGINS__ = [ ... ];
+```
+
+The core validates the embedded data again, adds external definitions to the panel, and uses `PluginHost` to start/stop enabled plugins. Each plugin gets a capability context (`dom`, `style`, `storage`), boolean settings, namespaced storage, and lifecycle cleanup. Settings changes restart the plugin. Exceptions are caught and shown as an `error` badge in the modal; the panel remains usable.
+
+Plugin code is executed with `new Function(...)` in the preload context with `require` and `process` shadowed as `undefined`. It has no Node.js or Electron IPC access, but it can still access page APIs such as `fetch` and the DOM. Treat local plugins as trusted code.
+
+Patch mode embeds the composed preload snapshot; after plugin changes run `tvmod repair --yes`.
+
 ## Desktop integration
 
 `tvmod install` writes:

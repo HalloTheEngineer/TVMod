@@ -6,6 +6,7 @@ import {
   findInstall,
 } from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
+import { readInstalledPlugins } from '../lib/plugin-files.js';
 import {
   displayPath,
   launchLog,
@@ -53,6 +54,12 @@ export function doctorCommand(options: DoctorOptions): void {
   label('wrapper', fs.existsSync(wrapperPath) ? displayPath(wrapperPath) : 'missing');
   label('desktop', fs.existsSync(desktopFile) ? displayPath(desktopFile) : 'missing');
   label('launch log', displayPath(launchLog));
+
+  const pluginScan = readInstalledPlugins();
+  label('external plugins', String(pluginScan.plugins.length));
+  for (const error of pluginScan.errors) {
+    warn(`plugin ${error.id}: ${error.message}`);
+  }
 
   if (state) {
     label('installed state', displayPath(state.preloadPath));

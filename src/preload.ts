@@ -1,6 +1,6 @@
-import { TVMOD_VERSION } from './version.js';
 import { contextBridge, webFrame } from 'electron';
 import { start } from './core/index.js';
+import { TVMOD_VERSION } from './version.js';
 
 const VERSION = TVMOD_VERSION;
 
@@ -45,5 +45,6 @@ if (isSupportedPage()) {
   start(VERSION, {
     executeJavaScript: (code) => webFrame.executeJavaScript(code),
     insertCSS: (css) => webFrame.insertCSS(css),
+    removeInsertedCSS: (key) => webFrame.removeInsertedCSS(key),
   });
 }
