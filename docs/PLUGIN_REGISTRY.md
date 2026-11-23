@@ -1,6 +1,6 @@
 # Plugin registry
 
-TVMod v0.9.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry installs, and automatic page reload after plugin changes in launcher mode.
+TVMod v0.10.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry management/installs, bulk updates, and automatic page reload after plugin changes in launcher mode.
 
 There is no default registry and no remote code is loaded automatically. You add a registry by pinning its public key.
 
@@ -85,7 +85,12 @@ Host the `registry/` directory over HTTPS. HTTP is accepted only for `localhost`
 tvmod plugin registry add example https://example.com/tvmod/index.json \
   --key ./keys/public-key.pem
 
+# Or pipe the public key instead of storing it temporarily:
+cat ./keys/public-key.pem | tvmod plugin registry add example \
+  https://example.com/tvmod/index.json --key -
+
 tvmod plugin registry list
+tvmod plugin registry list --json
 tvmod plugin browse
 tvmod plugin browse hello
 tvmod plugin install hello-world
@@ -105,13 +110,23 @@ tvmod plugin install hello-world
 
 In launcher mode, the page reloads automatically through the token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after installing plugins; the patch contains a snapshot of the preload.
 
-## Install from the plugin modal
+## Use the plugin modal
 
 The gear modal has a **Registry** tab in launcher mode. It reads the same configured registries and pinned keys as the CLI.
 
-1. Add at least one registry with `tvmod plugin registry add`.
-2. Open the TVMod gear modal and switch to **Registry**.
-3. Search and click **Install**.
+### Manage registries
+
+Open **Manage registries**:
+
+- **Add** — enter a name, the HTTPS index URL, and the public key. Paste the PEM contents or choose a `.pem` file. The index signature is verified before the registry is saved.
+- **Remove** — click **Remove**, then **Confirm remove**. Installed plugins are kept.
+
+The add form accepts only public keys. Private keys are rejected by both the panel and the CLI, and keys are passed to the CLI over stdin rather than written to disk or placed in process arguments.
+
+### Install and update
+
+1. Add at least one registry.
+2. Switch to **Registry**, search, and click an action.
 
 Button states:
 
@@ -119,9 +134,18 @@ Button states:
 - **Update** — another version is installed; the install runs with `--force`.
 - **Installed** — the installed version matches the registry; the button is disabled.
 
-The tab calls the CLI through a main-process IPC bridge. Plugin ids and registry names are validated before `execFile` runs, so no shell is involved. A failed install shows the CLI error in the tab (for example, a checksum or signature failure).
+When an installed external plugin has a different version in a configured registry, the tab shows an **Update all** button. It:
 
-Patch mode has no main-process bootstrap, so the Registry tab cannot install there. Use the CLI and then `tvmod repair --yes`.
+1. installs each update without reloading the page;
+2. reloads TradingView once if all updates succeed;
+3. keeps the page open and lists failures if any update fails;
+4. offers **Reload page** to apply successful updates after a partial failure.
+
+If the same plugin id is offered by multiple registries, bulk update skips it and asks you to update that plugin individually. TVMod does not yet record which registry installed a plugin, so it cannot choose safely.
+
+The tab calls the CLI through a main-process IPC bridge. Plugin ids and registry names are validated before `execFile`/`spawn` runs, no shell is involved, and public keys are capped at 16 KiB. A failed install shows the CLI error in the tab (for example, a checksum or signature failure).
+
+Patch mode has no main-process bootstrap, so the Registry tab cannot install or manage registries there. Use the CLI and then `tvmod repair --yes`.
 
 Remove a registry:
 
@@ -163,7 +187,8 @@ tvmod plugin registry add local http://127.0.0.1:8765/index.json \
 ## Limitations
 
 - No central public registry or catalog; the in-app tab only lists registries you configured.
-- No automatic updates; installs and updates are explicit. The Registry tab only installs when you click it.
+- No background or automatic updates; the tab checks when it loads or you press **Refresh**. Installs and updates require a click.
+- No installed-plugin registry provenance, so bulk update skips ambiguous ids.
 - No key revocation/expiry.
 - Single-file plugins only.
 - Registry indexes and bundles are limited to 1 MiB.

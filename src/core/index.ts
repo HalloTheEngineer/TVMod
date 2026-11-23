@@ -55,14 +55,7 @@ export function start(version: string, host: Host): void {
   });
 
   let panel: PanelHandle | null = null;
-  const registry =
-    host.registryList && host.registryInstall
-      ? {
-          list: () => host.registryList!(),
-          install: (id: string, name?: string, force?: boolean) =>
-            host.registryInstall!(id, name, force),
-        }
-      : undefined;
+  const registry = host.registry;
 
   const syncPlugins = (): void => {
     void pluginHost.sync().then(() => panel?.refresh());

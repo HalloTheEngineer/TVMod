@@ -5,7 +5,12 @@ import {
   withPluginSetting,
   type TvmodConfig,
 } from './config.js';
-import type { RegistryClient, RegistryPluginInfo } from './host.js';
+import type {
+  RegistryClient,
+  RegistryPluginInfo,
+  RegistrySource,
+} from './host.js';
+import { planRegistryUpdates } from './registry-updates.js';
 import type { PanelPlugin } from './plugin-types.js';
 
 const PANEL_ID = 'tvmod-root';
@@ -188,6 +193,93 @@ const PANEL_STYLE = `
   .install:hover { background: #1b2c3d; }
   .install:disabled { opacity: 0.55; cursor: default; }
 
+  .registry-status { flex: 1; min-width: 0; }
+  .registry-tools {
+    display: flex; align-items: center; justify-content: flex-end;
+    flex-wrap: wrap; gap: 6px;
+  }
+  .registry-action {
+    flex: none; padding: 3px 8px; border: 1px solid #3a3f46; border-radius: 6px;
+    background: #1d2229; color: #cfd5dc; font: inherit; font-size: 10.5px;
+    cursor: pointer;
+  }
+  .registry-action:hover { background: #262c34; }
+  .registry-action:disabled { opacity: 0.55; cursor: default; }
+  .registry-action.primary {
+    border-color: #2f4a6b; background: #16222e; color: #8fc2ff;
+  }
+  .registry-action.primary:hover { background: #1b2c3d; }
+  .registry-action.danger {
+    border-color: #5b2b2b; background: #201616; color: #ff9b9b;
+  }
+  .registry-action.danger:hover { background: #2a1616; }
+
+  .registry-manage {
+    margin: 0 0 8px; border: 1px solid #262b32; border-radius: 10px;
+    background: #171b20; overflow: hidden;
+  }
+  .registry-manage summary {
+    padding: 9px 10px; color: #b7c0c9; font-weight: 650; cursor: pointer;
+    list-style: none;
+  }
+  .registry-manage summary::-webkit-details-marker { display: none; }
+  .registry-manage summary::before {
+    content: "▸"; display: inline-block; width: 13px; color: #6f7883;
+  }
+  .registry-manage[open] summary::before { content: "▾"; }
+  .registry-manage-body { padding: 0 10px 10px; }
+
+  .registry-source {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 7px 0; border-top: 1px solid #262b32;
+  }
+  .registry-source-info { min-width: 0; }
+  .registry-source-name { color: #e9ecef; font-size: 11.5px; font-weight: 650; }
+  .registry-source-url {
+    margin-top: 1px; color: #6f7883; font-size: 10px;
+    word-break: break-all;
+  }
+  .registry-source-empty { padding: 8px 0 2px; color: #77808b; font-size: 10.5px; }
+
+  .registry-form {
+    display: grid; gap: 6px; margin-top: 8px; padding-top: 9px;
+    border-top: 1px solid #262b32;
+  }
+  .registry-input, .registry-textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid #3a3f46;
+    border-radius: 7px; background: #0f1216; color: #e9ecef;
+    font: inherit; outline: none;
+  }
+  .registry-input:focus, .registry-textarea:focus { border-color: #4c8dff; }
+  .registry-textarea {
+    min-height: 62px; resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 9.5px; line-height: 1.35;
+  }
+  .registry-form-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+  }
+  .registry-key-name {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .registry-form-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+  }
+  .registry-form-status { min-width: 0; color: #8f98a3; font-size: 10.5px; }
+  .registry-form-status[data-error="true"] { color: #ff9b9b; }
+  .registry-warnings { display: grid; gap: 4px; margin: 0 0 8px; }
+  .registry-warning {
+    padding: 6px 8px; border: 1px solid #4b3a23; border-radius: 7px;
+    background: #201a13; color: #ffcf9e; font-size: 10.5px;
+  }
+  .badge.update {
+    border-color: #28405a; background: #16222e; color: #8fc2ff;
+    text-transform: none; letter-spacing: 0;
+  }
+
   .reload {
     margin: 0 16px 8px; padding: 9px 10px; border: 1px solid #4b3a23;
     border-radius: 8px; background: #201a13; color: #ffcf9e; font-size: 11px;
@@ -283,8 +375,32 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       <div class="registry" hidden>
         <div class="registry-bar">
           <span class="registry-status"></span>
-          <button class="registry-refresh" type="button">Refresh</button>
+          <span class="registry-tools">
+            <button class="registry-action primary registry-update-all" type="button" hidden>Update all</button>
+            <button class="registry-action registry-reload" type="button" hidden>Reload page</button>
+            <button class="registry-refresh" type="button">Refresh</button>
+          </span>
         </div>
+        <details class="registry-manage">
+          <summary>Manage registries</summary>
+          <div class="registry-manage-body">
+            <div class="registry-sources"></div>
+            <div class="registry-form">
+              <input class="registry-input registry-name" type="text" maxlength="64" placeholder="Registry name" aria-label="Registry name">
+              <input class="registry-input registry-url" type="url" maxlength="2048" placeholder="https://example.com/tvmod/index.json" aria-label="Registry index URL">
+              <textarea class="registry-textarea registry-key" maxlength="16384" spellcheck="false" placeholder="-----BEGIN PUBLIC KEY-----" aria-label="Registry public key"></textarea>
+              <div class="registry-form-row">
+                <button class="registry-action registry-pick-key" type="button">Choose .pem</button>
+                <span class="registry-key-name registry-form-status"></span>
+              </div>
+              <div class="registry-form-actions">
+                <span class="registry-form-status registry-add-status"></span>
+                <button class="registry-action primary registry-add" type="button">Add registry</button>
+              </div>
+            </div>
+          </div>
+        </details>
+        <div class="registry-warnings"></div>
         <div class="registry-items"></div>
       </div>
       <div class="reload" hidden></div>
@@ -311,6 +427,18 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   const registryItems = shadow.querySelector<HTMLElement>('.registry-items');
   const registryStatus = shadow.querySelector<HTMLElement>('.registry-status');
   const registryRefresh = shadow.querySelector<HTMLButtonElement>('.registry-refresh');
+  const registryManage = shadow.querySelector<HTMLDetailsElement>('.registry-manage');
+  const registrySources = shadow.querySelector<HTMLElement>('.registry-sources');
+  const registryWarnings = shadow.querySelector<HTMLElement>('.registry-warnings');
+  const registryUpdateAll = shadow.querySelector<HTMLButtonElement>('.registry-update-all');
+  const registryReload = shadow.querySelector<HTMLButtonElement>('.registry-reload');
+  const registryName = shadow.querySelector<HTMLInputElement>('.registry-name');
+  const registryUrl = shadow.querySelector<HTMLInputElement>('.registry-url');
+  const registryKey = shadow.querySelector<HTMLTextAreaElement>('.registry-key');
+  const registryKeyName = shadow.querySelector<HTMLElement>('.registry-key-name');
+  const registryPickKey = shadow.querySelector<HTMLButtonElement>('.registry-pick-key');
+  const registryAdd = shadow.querySelector<HTMLButtonElement>('.registry-add');
+  const registryAddStatus = shadow.querySelector<HTMLElement>('.registry-add-status');
 
   if (version) version.textContent = `v${options.version}`;
   if (!list) return null;
@@ -324,14 +452,28 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     loaded: boolean;
     loading: boolean;
     items: RegistryPluginInfo[];
+    sources: RegistrySource[];
+    warnings: string[];
     installing: Set<string>;
+    updating: boolean;
+    adding: boolean;
+    removing: Set<string>;
+    removeArmed: string | null;
+    pendingReload: boolean;
     error: string | null;
     message: string | null;
   } = {
     loaded: false,
     loading: false,
     items: [],
+    sources: [],
+    warnings: [],
     installing: new Set(),
+    updating: false,
+    adding: false,
+    removing: new Set(),
+    removeArmed: null,
+    pendingReload: false,
     error: null,
     message: null,
   };
@@ -488,33 +630,172 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
         isPluginEnabled(config, plugin.id) !== initialEnabled.get(plugin.id)
     );
 
+  const registryInstalled = (id: string) =>
+    options.plugins.find((plugin) => plugin.external && plugin.id === id);
+
+  const registryPlan = () =>
+    planRegistryUpdates(registryState.items, options.plugins);
+
+  const registryBusy = (): boolean =>
+    registryState.loading ||
+    registryState.updating ||
+    registryState.adding ||
+    registryState.installing.size > 0 ||
+    registryState.removing.size > 0;
+
+  const setRegistryAddStatus = (text: string, error = false): void => {
+    if (!registryAddStatus) return;
+    registryAddStatus.textContent = text;
+    registryAddStatus.dataset.error = error ? 'true' : 'false';
+  };
+
+  const renderRegistrySources = (): void => {
+    if (!registrySources) return;
+    registrySources.textContent = '';
+
+    if (registryState.sources.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'registry-source-empty';
+      empty.textContent = 'No registries configured. Add one below.';
+      registrySources.append(empty);
+      return;
+    }
+
+    for (const source of registryState.sources) {
+      const row = document.createElement('div');
+      row.className = 'registry-source';
+
+      const info = document.createElement('div');
+      info.className = 'registry-source-info';
+
+      const name = document.createElement('div');
+      name.className = 'registry-source-name';
+      name.textContent = source.name;
+
+      const url = document.createElement('div');
+      url.className = 'registry-source-url';
+      url.textContent = source.url;
+
+      info.append(name, url);
+
+      const removing = registryState.removing.has(source.name);
+      const armed = registryState.removeArmed === source.name;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'registry-action danger';
+      remove.textContent = removing
+        ? 'Removing…'
+        : armed
+          ? 'Confirm remove'
+          : 'Remove';
+      remove.disabled = removing || registryBusy();
+      remove.addEventListener('click', () => {
+        if (registryState.removeArmed === source.name) {
+          void removeRegistrySource(source);
+          return;
+        }
+        registryState.removeArmed = source.name;
+        renderRegistry();
+        window.setTimeout(() => {
+          if (registryState.removeArmed === source.name) {
+            registryState.removeArmed = null;
+            renderRegistry();
+          }
+        }, 4000);
+      });
+
+      row.append(info, remove);
+      registrySources.append(row);
+    }
+  };
+
+  const renderRegistryWarnings = (): void => {
+    if (!registryWarnings) return;
+    registryWarnings.textContent = '';
+
+    const plan = registryPlan();
+    const messages = [...registryState.warnings];
+    if (plan.ambiguous.length > 0) {
+      messages.push(
+        `Updates skipped for ${plan.ambiguous.join(', ')}: multiple registries offer the same plugin id.`
+      );
+    }
+
+    for (const message of messages.slice(0, 5)) {
+      const line = document.createElement('div');
+      line.className = 'registry-warning';
+      line.textContent = message;
+      registryWarnings.append(line);
+    }
+
+    if (messages.length > 5) {
+      const more = document.createElement('div');
+      more.className = 'registry-warning';
+      more.textContent = `${messages.length - 5} more registry warning(s)`;
+      registryWarnings.append(more);
+    }
+  };
+
   const updateRegistryStatus = (): void => {
     if (!registryStatus || !registryRefresh) return;
-    registryRefresh.disabled = registryState.loading;
+    const plan = registryPlan();
+    const busy = registryBusy();
+
+    registryRefresh.disabled = busy;
+
+    if (registryUpdateAll) {
+      registryUpdateAll.hidden = plan.updates.length === 0;
+      registryUpdateAll.textContent = `Update all (${plan.updates.length})`;
+      registryUpdateAll.disabled = busy || plan.updates.length === 0;
+    }
+    if (registryReload) {
+      registryReload.hidden = !registryState.pendingReload;
+      registryReload.disabled = busy;
+    }
+    if (registryAdd) registryAdd.disabled = busy;
+    if (registryPickKey) registryPickKey.disabled = busy;
 
     if (registryState.loading) {
       registryStatus.dataset.error = 'false';
       registryStatus.textContent = 'Loading registries…';
+    } else if (registryState.updating) {
+      registryStatus.dataset.error = 'false';
+      registryStatus.textContent =
+        registryState.message ?? 'Updating plugins…';
     } else if (registryState.error) {
       registryStatus.dataset.error = 'true';
       registryStatus.textContent = registryState.error;
     } else if (registryState.message) {
       registryStatus.dataset.error = 'false';
       registryStatus.textContent = registryState.message;
+    } else if (registryState.sources.length === 0) {
+      registryStatus.dataset.error = 'false';
+      registryStatus.textContent = 'No registries configured';
     } else if (registryState.items.length === 0) {
       registryStatus.dataset.error = 'false';
       registryStatus.textContent = 'No plugins available';
     } else {
       registryStatus.dataset.error = 'false';
       const total = registryState.items.length;
-      registryStatus.textContent = `${total} plugin${total === 1 ? '' : 's'} available`;
+      const updates = plan.updates.length;
+      registryStatus.textContent = `${total} plugin${
+        total === 1 ? '' : 's'
+      } available${
+        updates > 0
+          ? ` · ${updates} update${updates === 1 ? '' : 's'}`
+          : ''
+      }`;
     }
   };
 
   const renderRegistry = (): void => {
     if (!registryItems) return;
-    registryItems.textContent = '';
+    const plan = registryPlan();
+
     updateRegistryStatus();
+    renderRegistrySources();
+    renderRegistryWarnings();
+    registryItems.textContent = '';
 
     const query = (search?.value ?? '').trim().toLowerCase();
     let visible = 0;
@@ -556,6 +837,18 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       registryBadge.textContent = item.registry;
 
       badges.append(versionBadge, registryBadge);
+
+      const installed = registryInstalled(item.id);
+      const upToDate = installed?.version === item.version;
+
+      if (installed && !upToDate) {
+        const updateBadge = document.createElement('span');
+        updateBadge.className = 'badge update';
+        updateBadge.textContent = 'update';
+        updateBadge.title = `Installed v${installed.version ?? '0.0.0'}`;
+        badges.append(updateBadge);
+      }
+
       name.append(badges);
 
       const desc = document.createElement('div');
@@ -563,19 +856,22 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       desc.textContent = item.description || 'No description.';
 
       info.append(name, desc);
-      if (item.author) {
+
+      const metaParts: string[] = [];
+      if (item.author) metaParts.push(item.author);
+      if (installed && !upToDate) {
+        metaParts.push(`installed v${installed.version ?? '0.0.0'}`);
+      }
+      if (metaParts.length > 0) {
         const meta = document.createElement('div');
         meta.className = 'plugin-meta';
-        meta.textContent = item.author;
+        meta.textContent = metaParts.join(' · ');
         info.append(meta);
       }
 
       const key = `${item.registry}:${item.id}`;
       const installing = registryState.installing.has(key);
-      const installed = options.plugins.find(
-        (plugin) => plugin.external && plugin.id === item.id
-      );
-      const upToDate = installed?.version === item.version;
+      const ambiguous = plan.ambiguous.includes(item.id);
 
       const install = document.createElement('button');
       install.type = 'button';
@@ -587,11 +883,15 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
           : installed
             ? 'Update'
             : 'Install';
-      install.disabled = installing || registryState.loading || upToDate;
+      install.disabled =
+        installing || registryBusy() || upToDate;
       if (upToDate) {
         install.title = `Already installed: v${item.version}`;
       } else if (installed) {
-        install.title = `Replace v${installed.version} with v${item.version}`;
+        install.title = `Replace v${installed.version ?? '0.0.0'} with v${item.version}`;
+      }
+      if (ambiguous) {
+        install.title = `${install.title ?? ''} Multiple registries offer this id; update individually.`.trim();
       }
       install.addEventListener('click', () => {
         void installRegistryPlugin(item, Boolean(installed && !upToDate));
@@ -605,15 +905,19 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       const empty = document.createElement('div');
       empty.className = 'empty';
       empty.textContent =
-        registryState.items.length === 0 && !registryState.loading
-          ? 'No plugins in the configured registries'
-          : 'No registry plugins match';
+        registryState.sources.length === 0
+          ? 'No registries configured'
+          : registryState.items.length === 0
+            ? 'No plugins in the configured registries'
+            : 'No registry plugins match';
       registryItems.append(empty);
     }
   };
 
   const loadRegistry = async (force = false): Promise<void> => {
-    if (!options.registry || registryState.loading) return;
+    if (!options.registry || registryState.loading || registryState.updating) {
+      return;
+    }
     if (registryState.loaded && !force) {
       renderRegistry();
       return;
@@ -625,11 +929,26 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     renderRegistry();
 
     try {
+      const sourcesResult = await options.registry.sources();
+      if (!sourcesResult.ok) {
+        throw new Error(sourcesResult.error ?? 'failed to load registries');
+      }
+
+      registryState.sources = sourcesResult.sources ?? [];
+      if (registryState.sources.length === 0) {
+        registryState.items = [];
+        registryState.warnings = [];
+        registryState.loaded = true;
+        if (registryManage) registryManage.open = true;
+        return;
+      }
+
       const result = await options.registry.list();
       if (!result.ok) {
         throw new Error(result.error ?? 'failed to load registries');
       }
       registryState.items = result.plugins ?? [];
+      registryState.warnings = result.warnings ?? [];
       registryState.loaded = true;
     } catch (error) {
       registryState.error =
@@ -644,9 +963,14 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     item: RegistryPluginInfo,
     force = false
   ): Promise<void> => {
-    if (!options.registry) return;
+    if (
+      !options.registry ||
+      registryState.updating ||
+      registryState.installing.size > 0
+    ) {
+      return;
+    }
     const key = `${item.registry}:${item.id}`;
-    if (registryState.installing.has(key)) return;
 
     registryState.installing.add(key);
     registryState.error = null;
@@ -674,6 +998,198 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       renderRegistry();
     }
   };
+
+  const pickRegistryKey = async (): Promise<void> => {
+    if (!options.registry || registryBusy()) return;
+    setRegistryAddStatus('Opening file picker…');
+    try {
+      const result = await options.registry.pickKey();
+      if (result.canceled) {
+        setRegistryAddStatus('');
+        return;
+      }
+      if (!result.ok || !result.publicKey) {
+        throw new Error(result.error ?? 'failed to read public key');
+      }
+      if (registryKey) registryKey.value = result.publicKey;
+      if (registryKeyName) registryKeyName.textContent = result.name ?? '';
+      setRegistryAddStatus('Public key loaded.');
+    } catch (error) {
+      setRegistryAddStatus(
+        error instanceof Error ? error.message : String(error),
+        true
+      );
+    }
+  };
+
+  const addRegistrySource = async (): Promise<void> => {
+    if (!options.registry || registryBusy()) return;
+
+    const name = registryName?.value.trim() ?? '';
+    const url = registryUrl?.value.trim() ?? '';
+    const publicKey = registryKey?.value.trim() ?? '';
+
+    if (!name || !url || !publicKey) {
+      setRegistryAddStatus('Name, URL, and public key are required.', true);
+      return;
+    }
+
+    registryState.adding = true;
+    registryState.error = null;
+    setRegistryAddStatus('Verifying signed index…');
+    renderRegistry();
+
+    try {
+      const result = await options.registry.add(name, url, publicKey);
+      if (!result.ok) {
+        throw new Error(result.error ?? 'failed to add registry');
+      }
+
+      registryState.message = `Registry ${name} added.`;
+      if (registryName) registryName.value = '';
+      if (registryUrl) registryUrl.value = '';
+      if (registryKey) registryKey.value = '';
+      if (registryKeyName) registryKeyName.textContent = '';
+      setRegistryAddStatus('');
+      registryState.adding = false;
+      registryState.loaded = false;
+      await loadRegistry(true);
+    } catch (error) {
+      setRegistryAddStatus(
+        error instanceof Error ? error.message : String(error),
+        true
+      );
+    } finally {
+      registryState.adding = false;
+      renderRegistry();
+    }
+  };
+
+  const removeRegistrySource = async (
+    source: RegistrySource
+  ): Promise<void> => {
+    if (!options.registry || registryBusy()) return;
+
+    registryState.removeArmed = null;
+    registryState.removing.add(source.name);
+    registryState.error = null;
+    renderRegistry();
+
+    try {
+      const result = await options.registry.remove(source.name);
+      if (!result.ok) {
+        throw new Error(result.error ?? 'failed to remove registry');
+      }
+      registryState.message = `Registry ${source.name} removed. Installed plugins were kept.`;
+      registryState.loaded = false;
+      await loadRegistry(true);
+    } catch (error) {
+      registryState.error =
+        error instanceof Error ? error.message : String(error);
+    } finally {
+      registryState.removing.delete(source.name);
+      renderRegistry();
+    }
+  };
+
+  const reloadRegistryPage = async (): Promise<void> => {
+    if (!options.registry || registryState.updating) return;
+    registryState.message = 'Reloading TradingView…';
+    renderRegistry();
+    try {
+      const result = await options.registry.reload();
+      if (!result.ok) {
+        throw new Error(result.error ?? 'failed to reload TradingView');
+      }
+      registryState.pendingReload = false;
+    } catch (error) {
+      registryState.error =
+        error instanceof Error ? error.message : String(error);
+    } finally {
+      renderRegistry();
+    }
+  };
+
+  const updateAllRegistryPlugins = async (): Promise<void> => {
+    if (!options.registry || registryBusy()) return;
+
+    const plan = registryPlan();
+    if (plan.updates.length === 0) return;
+
+    registryState.updating = true;
+    registryState.error = null;
+    registryState.pendingReload = false;
+    registryState.message = `Updating ${plan.updates.length} plugin${
+      plan.updates.length === 1 ? '' : 's'
+    }…`;
+    renderRegistry();
+
+    let succeeded = 0;
+    const failures: string[] = [];
+
+    try {
+      for (const update of plan.updates) {
+        registryState.message = `Updating ${update.name}…`;
+        renderRegistry();
+
+        const result = await options.registry.install(
+          update.id,
+          update.registry,
+          true,
+          true
+        );
+
+        if (result.ok) {
+          succeeded += 1;
+        } else {
+          failures.push(
+            `${update.name}: ${
+              (result.error || result.stderr || 'install failed').trim()
+            }`
+          );
+        }
+      }
+
+      if (failures.length > 0) {
+        registryState.warnings = [...registryState.warnings, ...failures];
+        registryState.error = `${succeeded} updated, ${failures.length} failed.`;
+        registryState.pendingReload = succeeded > 0;
+        registryState.message = null;
+      } else {
+        registryState.message = `${succeeded} updated. Reloading TradingView…`;
+        registryState.pendingReload = true;
+        const reload = await options.registry.reload();
+        if (!reload.ok) {
+          throw new Error(reload.error ?? 'failed to reload TradingView');
+        }
+        registryState.pendingReload = false;
+      }
+    } catch (error) {
+      registryState.error =
+        error instanceof Error ? error.message : String(error);
+      registryState.pendingReload = succeeded > 0;
+      registryState.message = null;
+    } finally {
+      registryState.updating = false;
+      renderRegistry();
+    }
+  };
+
+  registryRefresh?.addEventListener('click', () => {
+    void loadRegistry(true);
+  });
+  registryUpdateAll?.addEventListener('click', () => {
+    void updateAllRegistryPlugins();
+  });
+  registryReload?.addEventListener('click', () => {
+    void reloadRegistryPage();
+  });
+  registryPickKey?.addEventListener('click', () => {
+    void pickRegistryKey();
+  });
+  registryAdd?.addEventListener('click', () => {
+    void addRegistrySource();
+  });
 
   const setTab = (tab: 'plugins' | 'registry'): void => {
     if (tab === 'registry' && !options.registry) return;

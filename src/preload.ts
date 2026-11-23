@@ -1,8 +1,12 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import { start } from './core/index.js';
 import type {
+  RegistryActionResult,
   RegistryInstallResult,
+  RegistryKeyResult,
   RegistryListResult,
+  RegistryReloadResult,
+  RegistrySourcesResult,
 } from './core/host.js';
 import { TVMOD_VERSION } from './version.js';
 
@@ -50,14 +54,41 @@ if (isSupportedPage()) {
     executeJavaScript: (code) => webFrame.executeJavaScript(code),
     insertCSS: (css) => webFrame.insertCSS(css),
     removeInsertedCSS: (key) => webFrame.removeInsertedCSS(key),
-    registryList: () =>
-      ipcRenderer.invoke('tvmod:registry:list') as Promise<RegistryListResult>,
-    registryInstall: (id, registry, force) =>
-      ipcRenderer.invoke(
-        'tvmod:registry:install',
-        id,
-        registry,
-        force
-      ) as Promise<RegistryInstallResult>,
+    registry: {
+      list: () =>
+        ipcRenderer.invoke(
+          'tvmod:registry:list'
+        ) as Promise<RegistryListResult>,
+      sources: () =>
+        ipcRenderer.invoke(
+          'tvmod:registry:sources'
+        ) as Promise<RegistrySourcesResult>,
+      add: (name, url, publicKey) =>
+        ipcRenderer.invoke(
+          'tvmod:registry:add',
+          name,
+          url,
+          publicKey
+        ) as Promise<RegistryActionResult>,
+      remove: (name) =>
+        ipcRenderer.invoke(
+          'tvmod:registry:remove',
+          name
+        ) as Promise<RegistryActionResult>,
+      pickKey: () =>
+        ipcRenderer.invoke('tvmod:registry:pick-key') as Promise<RegistryKeyResult>,
+      install: (id, registry, force, noReload) =>
+        ipcRenderer.invoke(
+          'tvmod:registry:install',
+          id,
+          registry,
+          force,
+          noReload
+        ) as Promise<RegistryInstallResult>,
+      reload: () =>
+        ipcRenderer.invoke(
+          'tvmod:reload'
+        ) as Promise<RegistryReloadResult>,
+    },
   });
 }

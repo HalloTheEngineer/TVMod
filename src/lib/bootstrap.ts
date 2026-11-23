@@ -4,18 +4,48 @@ export function buildBootstrapScript(
   cliCommand: string[]
 ): string {
   return `(() => {
-  const { app, session, webContents, ipcMain } = require('electron');
+  const { app, session, webContents, ipcMain, dialog, BrowserWindow } = require('electron');
   const http = require('node:http');
   const fs = require('node:fs');
   const crypto = require('node:crypto');
   const path = require('node:path');
-  const { execFile } = require('node:child_process');
+  const { execFile, spawn } = require('node:child_process');
   const PRELOAD = ${JSON.stringify(preloadPath)};
   const CONTROL_FILE = ${JSON.stringify(controlFile)};
   const CLI = ${JSON.stringify(cliCommand)};
   const MARK = '__tvmodPatched';
+  const REGISTRY_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
+  const PLUGIN_ID = /^[a-z0-9][a-z0-9._-]{1,63}$/;
+  const MAX_PUBLIC_KEY_BYTES = 16 * 1024;
   let controlServer = null;
   let controlToken = null;
+
+  const reloadTradingViewPages = () => {
+    const pages = webContents.getAllWebContents().filter((wc) =>
+      !wc.isDestroyed() &&
+      String(wc.getURL()).startsWith('https://www.tradingview.com')
+    );
+    const ids = [];
+    for (const wc of pages) {
+      try {
+        wc.reload();
+        ids.push(wc.id);
+      } catch {}
+    }
+    return ids;
+  };
+
+  const cliError = (result) => {
+    const stderr = String(result.stderr || '').trim();
+    return stderr.replace(/^error\\s+/i, '') || String(result.error || 'command failed');
+  };
+
+  const cliWarnings = (result) =>
+    String(result.stderr || '')
+      .split(/\\r?\\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !/^error\\s+/i.test(line))
+      .map((line) => line.replace(/^warn\\s+/i, ''));
 
   const runCli = (args) =>
     new Promise((resolve) => {
@@ -42,45 +72,226 @@ export function buildBootstrapScript(
       );
     });
 
+  const runCliWithInput = (args, input) =>
+    new Promise((resolve) => {
+      if (!CLI.length) {
+        resolve({
+          ok: false,
+          stdout: '',
+          stderr: 'CLI command is unavailable',
+          error: 'CLI command is unavailable'
+        });
+        return;
+      }
+
+      let child;
+      try {
+        child = spawn(CLI[0], [...CLI.slice(1), ...args], {
+          env: process.env,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true
+        });
+      } catch (error) {
+        resolve({
+          ok: false,
+          stdout: '',
+          stderr: '',
+          error: String(error && error.message ? error.message : error)
+        });
+        return;
+      }
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({
+          ok: !error,
+          stdout,
+          stderr,
+          error: error ? String(error) : null
+        });
+      };
+      const timer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch {}
+        finish('CLI command timed out');
+      }, 60000);
+      const append = (target, chunk) => {
+        const next = target + String(chunk);
+        if (next.length > 4 * 1024 * 1024) {
+          try { child.kill('SIGKILL'); } catch {}
+          finish('CLI output exceeded 4 MiB');
+          return target;
+        }
+        return next;
+      };
+
+      child.on('error', (error) => finish(error.message || error));
+      child.stdout.on('data', (chunk) => { stdout = append(stdout, chunk); });
+      child.stderr.on('data', (chunk) => { stderr = append(stderr, chunk); });
+      child.on('close', (code) => {
+        finish(code === 0 ? null : 'CLI exited with code ' + code);
+      });
+      child.stdin.on('error', () => {});
+      child.stdin.end(input);
+    });
+
+  const validPublicKey = (value) =>
+    typeof value === 'string' &&
+    Buffer.byteLength(value, 'utf8') <= MAX_PUBLIC_KEY_BYTES &&
+    !/PRIVATE KEY/i.test(value) &&
+    /-----BEGIN PUBLIC KEY-----/.test(value);
+
+  const validRegistryUrl = (value) => {
+    if (typeof value !== 'string' || value.length > 2048) return false;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'https:') return true;
+      return (
+        parsed.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '::1', '[::1]'].includes(parsed.hostname)
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const registerRegistryIpc = () => {
     try {
       ipcMain.handle('tvmod:registry:list', async () => {
         const result = await runCli(['plugin', 'browse', '--json']);
         if (!result.ok) {
-          return {
-            ok: false,
-            error: result.stderr || result.error || 'failed to browse registries'
-          };
+          return { ok: false, error: cliError(result) };
         }
         try {
-          return { ok: true, plugins: JSON.parse(result.stdout || '[]') };
+          return {
+            ok: true,
+            plugins: JSON.parse(result.stdout || '[]'),
+            warnings: cliWarnings(result)
+          };
         } catch {
           return { ok: false, error: 'registry browse returned invalid JSON' };
         }
       });
 
-      ipcMain.handle('tvmod:registry:install', async (_event, id, registry, force) => {
-        if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(id)) {
+      ipcMain.handle('tvmod:registry:sources', async () => {
+        const result = await runCli(['plugin', 'registry', 'list', '--json']);
+        if (!result.ok) {
+          return { ok: false, error: cliError(result) };
+        }
+        try {
+          const parsed = JSON.parse(result.stdout || '[]');
+          if (!Array.isArray(parsed)) throw new Error('not an array');
+          return { ok: true, sources: parsed };
+        } catch {
+          return { ok: false, error: 'registry list returned invalid JSON' };
+        }
+      });
+
+      ipcMain.handle('tvmod:registry:add', async (_event, name, url, publicKey) => {
+        if (typeof name !== 'string' || !REGISTRY_NAME.test(name)) {
+          return { ok: false, error: 'invalid registry name' };
+        }
+        if (!validRegistryUrl(url)) {
+          return {
+            ok: false,
+            error: 'registry URLs must use HTTPS (HTTP is allowed only for localhost)'
+          };
+        }
+        if (!validPublicKey(publicKey)) {
+          return { ok: false, error: 'invalid public key' };
+        }
+
+        const content = publicKey.endsWith('\\n') ? publicKey : publicKey + '\\n';
+        const result = await runCliWithInput(
+          ['plugin', 'registry', 'add', name, url, '--key', '-'],
+          content
+        );
+        return result.ok
+          ? { ok: true }
+          : { ok: false, error: cliError(result) };
+      });
+
+      ipcMain.handle('tvmod:registry:remove', async (_event, name) => {
+        if (typeof name !== 'string' || !REGISTRY_NAME.test(name)) {
+          return { ok: false, error: 'invalid registry name' };
+        }
+        const result = await runCli([
+          'plugin',
+          'registry',
+          'remove',
+          name,
+          '--yes'
+        ]);
+        return result.ok
+          ? { ok: true }
+          : { ok: false, error: cliError(result) };
+      });
+
+      ipcMain.handle('tvmod:registry:pick-key', async (event) => {
+        try {
+          const owner = BrowserWindow.fromWebContents(event.sender);
+          const options = {
+            title: 'Choose a TVMod registry public key',
+            properties: ['openFile'],
+            filters: [
+              {
+                name: 'PEM public key',
+                extensions: ['pem', 'pub', 'key', 'txt']
+              }
+            ]
+          };
+          const picked = owner
+            ? await dialog.showOpenDialog(owner, options)
+            : await dialog.showOpenDialog(options);
+          if (picked.canceled || picked.filePaths.length === 0) {
+            return { ok: false, canceled: true };
+          }
+          const file = picked.filePaths[0];
+          const stat = fs.statSync(file);
+          if (stat.size > MAX_PUBLIC_KEY_BYTES) {
+            return { ok: false, error: 'public key is larger than 16 KiB' };
+          }
+          const publicKey = fs.readFileSync(file, 'utf8');
+          if (!validPublicKey(publicKey)) {
+            return { ok: false, error: 'invalid public key' };
+          }
+          return { ok: true, name: path.basename(file), publicKey };
+        } catch (error) {
+          return {
+            ok: false,
+            error: String(error && error.message ? error.message : error)
+          };
+        }
+      });
+
+      ipcMain.handle('tvmod:registry:install', async (_event, id, registry, force, noReload) => {
+        if (typeof id !== 'string' || !PLUGIN_ID.test(id)) {
           return { ok: false, error: 'invalid plugin id' };
         }
         const args = ['plugin', 'install', id];
         if (typeof registry === 'string' && registry) {
-          if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(registry)) {
+          if (!REGISTRY_NAME.test(registry)) {
             return { ok: false, error: 'invalid registry name' };
           }
           args.push('--registry', registry);
         }
         if (force === true) args.push('--force');
+        if (noReload === true) args.push('--no-reload');
         const result = await runCli(args);
-        const stderr = String(result.stderr || '').trim();
         return {
           ok: result.ok,
           stdout: result.stdout,
           stderr: result.stderr,
-          error: result.ok
-            ? undefined
-            : stderr.replace(/^error\s+/i, '') || result.error
+          error: result.ok ? undefined : cliError(result)
         };
+      });
+
+      ipcMain.handle('tvmod:reload', () => {
+        return { ok: true, reloaded: reloadTradingViewPages() };
       });
     } catch (error) {
       console.error('[tvmod] registry IPC registration failed', error);
@@ -126,17 +337,9 @@ export function buildBootstrapScript(
         }
 
         if (request.method === 'POST' && request.url === '/reload') {
-          const pages = webContents.getAllWebContents().filter((wc) =>
-            !wc.isDestroyed() &&
-            String(wc.getURL()).startsWith('https://www.tradingview.com')
-          );
-          for (const wc of pages) {
-            try {
-              wc.reload();
-            } catch {}
-          }
+          const reloaded = reloadTradingViewPages();
           response.writeHead(200, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ reloaded: pages.map((wc) => wc.id) }));
+          response.end(JSON.stringify({ reloaded }));
           return;
         }
 

@@ -105,6 +105,8 @@ export function pluginPackCommand(
   info('Add this SHA-256 and the bundle filename to a registry index.');
 }
 
+const MAX_PUBLIC_KEY_BYTES = 16 * 1024;
+
 export async function registryAddCommand(
   name: string | undefined,
   url: string | undefined,
@@ -113,11 +115,25 @@ export async function registryAddCommand(
 ): Promise<void> {
   if (!name || !url || !keyPath) {
     throw new UserError(
-      'usage: tvmod plugin registry add <name> <index-url> --key <public-key.pem> [--force]'
+      'usage: tvmod plugin registry add <name> <index-url> --key <public-key.pem|-> [--force]'
     );
   }
 
-  const publicKey = fs.readFileSync(path.resolve(keyPath), 'utf8');
+  const publicKey =
+    keyPath === '-'
+      ? fs.readFileSync(0, 'utf8')
+      : fs.readFileSync(path.resolve(keyPath), 'utf8');
+
+  if (Buffer.byteLength(publicKey, 'utf8') > MAX_PUBLIC_KEY_BYTES) {
+    throw new UserError('public key is larger than 16 KiB');
+  }
+  if (/PRIVATE KEY/i.test(publicKey)) {
+    throw new UserError('this is a private key; add only the public key');
+  }
+  if (!/-----BEGIN PUBLIC KEY-----/.test(publicKey)) {
+    throw new UserError('expected a PEM public key (BEGIN PUBLIC KEY)');
+  }
+
   const index = await fetchRegistryIndex(url, publicKey);
 
   addRegistry(
@@ -136,8 +152,22 @@ export async function registryAddCommand(
   ok('registry signature verified');
 }
 
-export function registryListCommand(): void {
+export function registryListCommand(options: { json?: boolean } = {}): void {
   const config = loadRegistries();
+
+  if (options.json) {
+    info(
+      JSON.stringify(
+        config.registries.map((record) => ({
+          name: record.name,
+          url: record.url,
+          addedAt: record.addedAt,
+        }))
+      )
+    );
+    return;
+  }
+
   heading('Plugin registries');
   if (config.registries.length === 0) {
     info('  none configured');
@@ -279,7 +309,7 @@ export async function pluginBrowseCommand(
 
 export async function pluginInstallCommand(
   id: string | undefined,
-  options: { registry?: string; force?: boolean } = {}
+  options: { registry?: string; force?: boolean; noReload?: boolean } = {}
 ): Promise<void> {
   if (!id) throw new UserError('usage: tvmod plugin install <id> [--registry <name>]');
   if (!readState()) {
@@ -379,5 +409,7 @@ export async function pluginInstallCommand(
 
   refreshInstalledPreload();
   warnIfPatched();
-  await reloadRunningApp();
+  if (!options.noReload) {
+    await reloadRunningApp();
+  }
 }

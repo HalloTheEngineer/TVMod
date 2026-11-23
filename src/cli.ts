@@ -47,12 +47,12 @@ Usage:
   tvmod plugin path
   tvmod plugin keygen [dir] [--force]
   tvmod plugin pack <dir> --key <private-key.pem> [--out <file>]
-  tvmod plugin registry add <name> <url> --key <public-key.pem>
-  tvmod plugin registry list
+  tvmod plugin registry add <name> <url> --key <public-key.pem|->
+  tvmod plugin registry list [--json]
   tvmod plugin registry remove <name> --yes
   tvmod plugin registry sign <index.json> --key <private-key.pem>
   tvmod plugin browse [query] [--registry <name>] [--json]
-  tvmod plugin install <id> [--registry <name>] [--force]
+  tvmod plugin install <id> [--registry <name>] [--force] [--no-reload]
 
 Launch options:
   --app <path>            override the detected TradingView executable
@@ -85,7 +85,8 @@ Plugin options:
   --key <path>            signing public/private key for pack/registry commands
   --out <path>            output path for pack/registry sign
   --registry <name>       restrict browse/install to one registry
-  --json                  machine-readable output (plugin browse)
+  --json                  machine-readable output (browse/registry list)
+  --no-reload             do not reload TradingView after plugin install
 
 Other:
   -h, --help              show this help
@@ -254,6 +255,7 @@ async function run(): Promise<void> {
           await pluginInstallCommand(arg, {
             registry,
             force: Boolean(values.force),
+            noReload: Boolean(values['no-reload']),
           });
           return;
         case 'registry': {
@@ -267,7 +269,7 @@ async function run(): Promise<void> {
               });
               return;
             case 'list':
-              registryListCommand();
+              registryListCommand({ json: Boolean(values.json) });
               return;
             case 'remove':
               registryRemoveCommand(name, { yes: Boolean(values.yes) });

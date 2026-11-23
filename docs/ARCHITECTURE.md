@@ -93,7 +93,9 @@ Patch mode embeds the composed preload snapshot; after plugin changes run `tvmod
 
 In launcher mode, the main-process bootstrap starts a loopback HTTP server with a random token stored in `~/.local/state/tvmod/control.json` (mode 0600). `plugin add/remove/refresh/install` calls `POST /reload` to reload TradingView pages after recomposing the preload. Patch mode has no main-process control server and still requires `tvmod repair --yes` or a manual reload.
 
-The main-process bootstrap also registers `tvmod:registry:list` and `tvmod:registry:install` IPC handlers. The preload exposes them to the isolated core only; the panel's Registry tab calls them to list configured registries and to run `plugin browse --json` / `plugin install`. The handlers validate plugin ids and registry names, use `execFile` without a shell, and return a structured result. They exist only in launcher mode, which is why patch installs still use the CLI.
+The main-process bootstrap also registers the registry IPC handlers: `tvmod:registry:list`, `sources`, `add`, `remove`, `pick-key`, `install`, and `tvmod:reload`. The preload exposes them to the isolated core only; the panel's Registry tab uses them for browsing, registry management, updates, and page reloads. Handlers validate plugin ids, registry names, URLs, and public-key shape, use `execFile` (or `spawn` with stdin for key import) without a shell, and return structured results. They exist only in launcher mode, which is why patch installs still use the CLI.
+
+Bulk updates run `plugin install ... --no-reload` sequentially, then call the shared page-reload helper once. Partial failures leave the page open so the panel can show which plugins failed and offer a manual reload.
 
 ## Platform layers
 
