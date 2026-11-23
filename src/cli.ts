@@ -11,6 +11,16 @@ import {
   pluginRefreshCommand,
   pluginRemoveCommand,
 } from './commands/plugin.js';
+import {
+  pluginBrowseCommand,
+  pluginInstallCommand,
+  pluginKeygenCommand,
+  pluginPackCommand,
+  registryAddCommand,
+  registryListCommand,
+  registryRemoveCommand,
+  registrySignCommand,
+} from './commands/plugin-dist.js';
 import { uninstallCommand } from './commands/uninstall.js';
 import { UserError } from './lib/errors.js';
 import {
@@ -35,6 +45,14 @@ Usage:
   tvmod plugin remove <id> --yes
   tvmod plugin refresh
   tvmod plugin path
+  tvmod plugin keygen [dir] [--force]
+  tvmod plugin pack <dir> --key <private-key.pem> [--out <file>]
+  tvmod plugin registry add <name> <url> --key <public-key.pem>
+  tvmod plugin registry list
+  tvmod plugin registry remove <name> --yes
+  tvmod plugin registry sign <index.json> --key <private-key.pem>
+  tvmod plugin browse [query] [--registry <name>]
+  tvmod plugin install <id> [--registry <name>] [--force]
 
 Launch options:
   --app <path>            override the detected TradingView executable
@@ -61,7 +79,10 @@ Patch options:
   --yes                   required confirmation for patch/repair/unpatch/plugin remove
 
 Plugin options:
-  --force                 replace an existing plugin with the same id
+  --force                 replace an existing plugin, bundle, or copy
+  --key <path>            signing public/private key for pack/registry commands
+  --out <path>            output path for pack/registry sign
+  --registry <name>       restrict browse/install to one registry
 
 Other:
   -h, --help              show this help
@@ -93,6 +114,9 @@ async function run(): Promise<void> {
       patch: { type: 'boolean', default: false },
       system: { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
+      key: { type: 'string' },
+      out: { type: 'string' },
+      registry: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
     },
@@ -186,22 +210,71 @@ async function run(): Promise<void> {
     case 'plugin': {
       const subcommand = positionals[1] ?? 'list';
       const arg = positionals[2];
+      const registry = typeof values.registry === 'string' ? values.registry : undefined;
+      const key = typeof values.key === 'string' ? values.key : undefined;
+      const out = typeof values.out === 'string' ? values.out : undefined;
+
       switch (subcommand) {
         case 'add':
-          pluginAddCommand(arg, { force: Boolean(values.force) });
+          await pluginAddCommand(arg, { force: Boolean(values.force) });
           return;
         case 'list':
           pluginListCommand();
           return;
         case 'remove':
-          pluginRemoveCommand(arg, { yes: Boolean(values.yes) });
+          await pluginRemoveCommand(arg, { yes: Boolean(values.yes) });
           return;
         case 'refresh':
-          pluginRefreshCommand();
+          await pluginRefreshCommand();
           return;
         case 'path':
           pluginPathCommand();
           return;
+        case 'keygen':
+          pluginKeygenCommand(arg, { force: Boolean(values.force) });
+          return;
+        case 'pack':
+          pluginPackCommand(arg, {
+            key,
+            out,
+            force: Boolean(values.force),
+          });
+          return;
+        case 'browse':
+          await pluginBrowseCommand(arg, { registry });
+          return;
+        case 'install':
+          await pluginInstallCommand(arg, {
+            registry,
+            force: Boolean(values.force),
+          });
+          return;
+        case 'registry': {
+          const action = positionals[2] ?? 'list';
+          const name = positionals[3];
+          const url = positionals[4];
+          switch (action) {
+            case 'add':
+              await registryAddCommand(name, url, key, {
+                force: Boolean(values.force),
+              });
+              return;
+            case 'list':
+              registryListCommand();
+              return;
+            case 'remove':
+              registryRemoveCommand(name, { yes: Boolean(values.yes) });
+              return;
+            case 'sign':
+              registrySignCommand(name, key, {
+                out,
+                force: Boolean(values.force),
+              });
+              return;
+            default:
+              throw new UserError(`unknown registry subcommand: ${action}`);
+          }
+        }
         default:
           throw new UserError(`unknown plugin subcommand: ${subcommand}`);
       }

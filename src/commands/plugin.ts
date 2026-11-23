@@ -8,6 +8,7 @@ import {
   removePluginDirectory,
   writeInstalledPreload,
 } from '../lib/plugin-files.js';
+import { requestPageReload } from '../lib/control.js';
 import { UserError } from '../lib/errors.js';
 import {
   displayPath,
@@ -21,7 +22,7 @@ export interface PluginAddOptions {
   force?: boolean;
 }
 
-function warnIfPatched(): void {
+export function warnIfPatched(): void {
   const state = readState();
   if (state?.patch) {
     warn(
@@ -30,7 +31,7 @@ function warnIfPatched(): void {
   }
 }
 
-function refresh(): void {
+export function refreshInstalledPreload(): void {
   const state = readState();
   const target =
     state?.preloadPath ??
@@ -43,10 +44,29 @@ function refresh(): void {
   label('preload', displayPath(result.path));
 }
 
-export function pluginAddCommand(
+export async function reloadRunningApp(): Promise<boolean> {
+  if (readState()?.patch) {
+    warn(
+      'this install is patched: hot reload is unavailable; run "tvmod repair --yes" after plugin changes'
+    );
+    return false;
+  }
+
+  if (await requestPageReload()) {
+    ok('TradingView reloaded with the updated plugin set.');
+    return true;
+  }
+
+  warn(
+    'TradingView is not running or its hot-reload endpoint is unavailable; reload the page manually.'
+  );
+  return false;
+}
+
+export async function pluginAddCommand(
   sourceDir: string | undefined,
   options: PluginAddOptions
-): void {
+): Promise<void> {
   if (!sourceDir) {
     throw new UserError('usage: tvmod plugin add <plugin-directory> [--force]');
   }
@@ -66,9 +86,9 @@ export function pluginAddCommand(
   label('settings', String(manifest.settings?.length ?? 0));
   label('path', displayPath(`${pluginsDir}/${manifest.id}`));
 
-  refresh();
+  refreshInstalledPreload();
   warnIfPatched();
-  ok('Reload the TradingView page; the plugin appears in the TVMod gear modal.');
+  await reloadRunningApp();
 }
 
 export function pluginListCommand(): void {
@@ -105,10 +125,10 @@ export function pluginListCommand(): void {
   info(`allowed permissions: ${ALLOWED_PERMISSIONS.join(', ')}`);
 }
 
-export function pluginRemoveCommand(
+export async function pluginRemoveCommand(
   id: string | undefined,
   options: { yes?: boolean }
-): void {
+): Promise<void> {
   if (!id) throw new UserError('usage: tvmod plugin remove <id> --yes');
   if (!options.yes) {
     throw new UserError('removing a plugin requires --yes');
@@ -116,19 +136,19 @@ export function pluginRemoveCommand(
 
   removePluginDirectory(id);
   ok(`removed plugin ${id}`);
-  refresh();
+  refreshInstalledPreload();
   warnIfPatched();
-  warn('Reload the TradingView page to drop the plugin runtime.');
+  await reloadRunningApp();
 }
 
-export function pluginRefreshCommand(): void {
+export async function pluginRefreshCommand(): Promise<void> {
   if (!readState()) {
     throw new UserError('TVMod is not installed. Run "tvmod install" first.');
   }
   heading('Refreshing embedded plugins');
-  refresh();
+  refreshInstalledPreload();
   warnIfPatched();
-  ok('Reload the TradingView page to load the refreshed plugins.');
+  await reloadRunningApp();
 }
 
 export function pluginPathCommand(): void {

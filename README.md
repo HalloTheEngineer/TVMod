@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop** on Linux.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.6.1, launcher + patched-copy/in-place installer + local plugin SDK + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host.
+> Status: **v0.7.0, launcher + patched-copy/in-place installer + signed plugin registry + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host.
 
 ## Features
 
@@ -14,6 +14,8 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Config button** — a gear button inside the chart opens a Vencord-style plugin modal; `Ctrl+Shift+M` also works.
 - **Individual plugins** — toggle Adblock, Hide AI Copilot, Hide Community Hub, and Hide Sidebar independently.
 - **Local plugin SDK** — install single-file plugins with a manifest, permissions, boolean settings, and lifecycle cleanup.
+- **Signed plugin registry** — Ed25519-signed indexes/bundles, SHA-256 verification, pinned registry keys, and CLI browse/install.
+- **Plugin hot reload** — launcher mode reloads TradingView pages automatically after plugin install/remove/refresh.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
 - **One-command patched copy** — `tvmod install --copy --patch --yes` copies TradingView into `~/.local/opt/tradingview` and patches it without root.
@@ -39,7 +41,7 @@ Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Rel
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf tvmod-0.6.1-linux-x64.tar.gz
+tar -xzf tvmod-0.7.0-linux-x64.tar.gz
 cd tvmod-0.2.0-linux-x64
 ./tvmod install
 ```
@@ -49,17 +51,17 @@ Then close TradingView and start it from your normal icon. The release binary do
 To verify the GitHub build provenance:
 
 ```sh
-gh attestation verify tvmod-0.6.1-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.7.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 To verify the Sigstore signature, download the `.sigstore.json` assets and run:
 
 ```sh
 cosign verify-blob \
-  --bundle tvmod-0.6.1-linux-x64.tar.gz.sigstore.json \
+  --bundle tvmod-0.7.0-linux-x64.tar.gz.sigstore.json \
   --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.6.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  tvmod-0.6.1-linux-x64.tar.gz
+  tvmod-0.7.0-linux-x64.tar.gz
 ```
 
 The repo helper `tools/verify-release.sh 0.6.1` verifies both signatures and the checksum.
@@ -107,6 +109,14 @@ tvmod plugin list                list local plugins
 tvmod plugin remove <id> --yes   remove a plugin
 tvmod plugin refresh             recompose the installed preload
 tvmod plugin path                print the plugin directory
+tvmod plugin keygen [dir]        generate Ed25519 signing keys
+tvmod plugin pack <dir> --key <private> pack a signed .tvplug bundle
+tvmod plugin registry add <name> <url> --key <public>
+tvmod plugin registry list
+tvmod plugin registry remove <name> --yes
+tvmod plugin registry sign <index.json> --key <private>
+tvmod plugin browse [query] [--registry <name>]
+tvmod plugin install <id> [--registry <name>]
 ```
 
 Install options:
@@ -203,7 +213,23 @@ tvmod plugin add examples/plugins/hello-world
 
 Reload the TradingView page and enable **Hello World** in the gear modal. It demonstrates a badge, a boolean setting, permissions, storage, and cleanup. See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) for the manifest and API.
 
-External plugins are embedded into the installed preload at install/add/refresh time. For a patched install, run `tvmod repair --yes` after changing plugins.
+External plugins are embedded into the installed preload at install/add/refresh time. Launcher mode reloads TradingView pages automatically through a token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after changing plugins.
+
+### Signed registry
+
+A registry is a static index plus signed `.tvplug` bundles. Keys are Ed25519; indexes and bundles are verified against a pinned public key, and each bundle’s SHA-256 is checked before installation.
+
+```sh
+tvmod plugin keygen ./keys
+tvmod plugin pack examples/plugins/hello-world --key ./keys/private-key.pem --out ./registry/hello-world.tvplug
+# create registry/index.json with the printed sha256
+tvmod plugin registry sign ./registry/index.json --key ./keys/private-key.pem
+tvmod plugin registry add example https://example.com/tvmod/index.json --key ./keys/public-key.pem
+tvmod plugin browse
+tvmod plugin install hello-world
+```
+
+See [docs/PLUGIN_REGISTRY.md](docs/PLUGIN_REGISTRY.md) for the formats, key rotation, hosting, and security model. There is no default registry.
 
 ## Snap
 
@@ -296,6 +322,10 @@ src/lib/               app detection, inspector client, desktop integration, sta
 src/preload.ts         Electron preload entry
 src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, plugin host, panel
 src/lib/plugin-files.ts plugin validation, embedding, and CLI plugin install
+src/lib/plugin-signing.ts Ed25519 bundles/indexes
+src/lib/registry.ts     registry config, fetch, and verification
+src/lib/control.ts      launcher hot-reload control client
+src/commands/plugin-dist.ts pack/sign/registry/install commands
 src/lib/copy-app.ts    user-owned copy installer
 src/lib/asar-patch.ts  patch build, backup, elevated replacement
 src/lib/restart-prompt.ts running-instance prompt
@@ -322,9 +352,9 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Snap-aware paths, `snap run` launch, and a confinement probe
 - [ ] Snap validation on a confined snapd host (inspect binding and preload readability)
 - [x] Sigstore keyless release signing and GitHub provenance
+- [x] Ed25519-signed plugin registry and hot page reload
 - [x] Scheduled web compatibility census with issue reporting
 - [ ] Windows/macOS launcher
-- [ ] Remote/signed plugin registry and hot reload
 
 ## License
 

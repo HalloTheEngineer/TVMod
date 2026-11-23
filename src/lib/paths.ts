@@ -16,6 +16,8 @@ export const stateDir = path.join(xdg('XDG_STATE_HOME', '.local/state'), 'tvmod'
 export const logsDir = path.join(stateDir, 'logs');
 export const launchLog = path.join(logsDir, 'launch.log');
 export const stateFile = path.join(configDir, 'state.json');
+export const controlFile = path.join(stateDir, 'control.json');
+export const registriesFile = path.join(configDir, 'registries.json');
 export const preloadTarget = path.join(dataDir, 'preload.js');
 export const snapPreloadTarget = path.join(
   home,

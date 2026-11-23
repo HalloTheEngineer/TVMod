@@ -28,21 +28,21 @@ No private key is stored in the repository. The signing certificate binds the ar
 Install [cosign](https://docs.sigstore.dev/cosign/installation/), download the release assets into one directory, and run:
 
 ```sh
-./tools/verify-release.sh 0.6.1
+./tools/verify-release.sh 0.7.0
 ```
 
 Or manually:
 
 ```sh
 cosign verify-blob \
-  --bundle tvmod-0.6.1-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.6.1 \
+  --bundle tvmod-0.7.0-linux-x64.tar.gz.sigstore.json \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.7.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  tvmod-0.6.1-linux-x64.tar.gz
+  tvmod-0.7.0-linux-x64.tar.gz
 
 cosign verify-blob \
   --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.6.1 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.7.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   SHA256SUMS
 
@@ -52,7 +52,7 @@ sha256sum -c SHA256SUMS
 GitHub provenance remains available separately:
 
 ```sh
-gh attestation verify tvmod-0.6.1-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.7.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 ## Updating the version

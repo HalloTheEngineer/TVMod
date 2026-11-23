@@ -87,6 +87,12 @@ Plugin code is executed with `new Function(...)` in the preload context with `re
 
 Patch mode embeds the composed preload snapshot; after plugin changes run `tvmod repair --yes`.
 
+## Plugin registry and hot reload
+
+`tvmod plugin pack` creates an Ed25519-signed `.tvplug` envelope. A registry is a static JSON index signed by the same Ed25519 key, listing bundle URLs and SHA-256 hashes. `plugin registry add` pins the public key; `plugin install` verifies the index, bundle hash, bundle signature, and id/version before installing. There is no default registry and no automatic update.
+
+In launcher mode, the main-process bootstrap starts a loopback HTTP server with a random token stored in `~/.local/state/tvmod/control.json` (mode 0600). `plugin add/remove/refresh/install` calls `POST /reload` to reload TradingView pages after recomposing the preload. Patch mode has no main-process control server and still requires `tvmod repair --yes` or a manual reload.
+
 ## Desktop integration
 
 `tvmod install` writes:

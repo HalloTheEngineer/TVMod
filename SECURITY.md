@@ -17,7 +17,7 @@ Anyone who can attach to the inspector during the bootstrap window can execute c
 
 ## Mods and remote code
 
-The v0.6.1 core is bundled into the preload. It does not load remote code or a remote plugin registry. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh` time.
+The v0.7.0 core is bundled into the preload. It does not load remote code automatically. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh`/`install` time; explicitly added signed registries are only fetched and installed on user command.
 
 Plugin code runs in the renderer preload context through a capability context. It does not receive Node.js, Electron IPC, or TVMod's main-process APIs. The test probe confirms `require`, `process`, `globalThis.require`, and `globalThis.process` are unavailable inside a plugin. Plugins can still use page APIs such as `fetch`, `WebSocket`, and direct DOM access, so treat third-party plugins as trusted local code and review them before installing.
 
@@ -27,7 +27,11 @@ Capabilities are declared in the manifest:
 - `style` — inject/remove frame CSS
 - `storage` — namespaced JSON local storage
 
-No remote registry, auto-update, or dynamic download exists in v1. A future registry must add signing, review, and update verification.
+A signed plugin registry is available in v0.7.0. Registry indexes and bundles are Ed25519-signed, bundles are SHA-256 checked, and the registry public key is pinned when the registry is added. There is no default registry, auto-update, or revocation. Registry installation still runs local plugin code; review publishers and plugins.
+
+## Hot reload control endpoint
+
+The launcher starts an HTTP server bound to `127.0.0.1` on a random port. Its token is stored in `~/.local/state/tvmod/control.json` with mode 0600. The server only exposes `GET /status` and authenticated `POST /reload`. It closes and removes the control file on app quit. Patch mode does not start this server.
 
 ## Patch mode
 

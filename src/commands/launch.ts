@@ -12,7 +12,12 @@ import {
 import { CdpClient, waitForMainProcess, waitForPreload } from '../lib/cdp.js';
 import { findInstall, type AppInstall } from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
-import { launchLog, logsDir, ensureDir } from '../lib/paths.js';
+import {
+  controlFile,
+  launchLog,
+  logsDir,
+  ensureDir,
+} from '../lib/paths.js';
 import {
   terminatePids,
   tradingViewPids,
@@ -355,7 +360,7 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
       ok: boolean;
       deferred: boolean;
       preloads?: string[];
-    }>(client, buildBootstrapScript(state.preloadPath), 'bootstrap');
+    }>(client, buildBootstrapScript(state.preloadPath, controlFile), 'bootstrap');
     debug(`bootstrap: ${JSON.stringify(bootstrap)}`);
 
     if (!bootstrap?.ok) {
