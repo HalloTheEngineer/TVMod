@@ -6,8 +6,10 @@ import {
   findInstall,
 } from '../lib/app-detect.js';
 import { writeDesktopEntries, writeWrapper } from '../lib/desktop.js';
+import { copyAppForPatch } from '../lib/copy-app.js';
 import { UserError } from '../lib/errors.js';
 import { writeInstalledPreload } from '../lib/plugin-files.js';
+import { patchCommand } from './patch.js';
 import {
   displayPath,
   ensureDir,
@@ -18,18 +20,27 @@ import {
   logsDir,
   stateDir,
   wrapperPath,
+  copiedAppDir,
 } from '../lib/paths.js';
 import { tradingViewPids } from '../lib/proc.js';
 import { readState, writeState } from '../lib/state.js';
-import { heading, label, ok, warn } from '../lib/logger.js';
+import { heading, info, label, ok, warn } from '../lib/logger.js';
 import { sha256File } from '../lib/util.js';
 
 export interface InstallOptions {
   app?: string;
+  copy?: boolean;
+  patch?: boolean;
+  force?: boolean;
+  yes?: boolean;
 }
 
-export function installCommand(options: InstallOptions): void {
-  const install = findInstall(options.app);
+export async function installCommand(options: InstallOptions): Promise<void> {
+  if (options.patch && !options.yes) {
+    throw new UserError('--patch modifies app.asar and requires --yes');
+  }
+
+  let install = findInstall(options.app);
 
   if (!install) {
     const candidates = candidatePaths();
@@ -38,6 +49,17 @@ export function installCommand(options: InstallOptions): void {
         .map((value) => `  - ${value}`)
         .join('\n')}\nPass --app <path-to-tradingview> if it is installed elsewhere.`
     );
+  }
+
+  if (options.copy) {
+    if (install.flavor === 'snap') {
+      throw new UserError(
+        'copying a confined Snap install is not supported; use the launcher backend.'
+      );
+    }
+    info(`Copying TradingView to ${displayPath(copiedAppDir)} ...`);
+    install = copyAppForPatch(install, { force: options.force });
+    ok(`using user-owned copy at ${displayPath(copiedAppDir)}`);
   }
 
   const source = preloadSourcePath();
@@ -109,6 +131,10 @@ export function installCommand(options: InstallOptions): void {
     warn('Close it and start it again from the TradingView icon.');
   } else {
     ok('Start TradingView from your normal icon; TVMod will attach on launch.');
+  }
+
+  if (options.patch) {
+    await patchCommand({ app: install.exe, yes: true });
   }
 
   if (install.flavor === 'snap') {

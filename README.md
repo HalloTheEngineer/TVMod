@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop** on Linux.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.3.0, launcher + optional patch backend + local plugin SDK**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
+> Status: **v0.4.0, launcher + patched-copy installer + local plugin SDK**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
 
 ## Features
 
@@ -16,6 +16,8 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Local plugin SDK** — install single-file plugins with a manifest, permissions, boolean settings, and lifecycle cleanup.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
+- **One-command patched copy** — `tvmod install --copy --patch --yes` copies TradingView into `~/.local/opt/tradingview` and patches it without root.
+- **Restart prompt** — clicking the icon while TradingView is open offers to close and relaunch it (Zenity/KDialog or a terminal prompt).
 - **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
 
 ## Requirements
@@ -33,7 +35,7 @@ Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Rel
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf tvmod-0.3.0-linux-x64.tar.gz
+tar -xzf tvmod-0.4.0-linux-x64.tar.gz
 cd tvmod-0.2.0-linux-x64
 ./tvmod install
 ```
@@ -43,7 +45,7 @@ Then close TradingView and start it from your normal icon. The release binary do
 To verify the GitHub build provenance:
 
 ```sh
-gh attestation verify tvmod-0.3.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.4.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 ## Install from source
@@ -77,7 +79,7 @@ The CLI and desktop wrapper are installed at `~/.local/bin/tvmod` and `~/.local/
 ## Commands
 
 ```text
-tvmod install [--app <path>]     install the launcher, preload, and desktop entries
+tvmod install [options]          install the launcher, preload, and desktop entries
 tvmod launch [options]           attach TVMod to the app
 tvmod doctor [--app <path>]      show paths, versions, state, and running PIDs
 tvmod uninstall [--purge]        remove the desktop entries, wrapper, and state
@@ -91,6 +93,16 @@ tvmod plugin refresh             recompose the installed preload
 tvmod plugin path                print the plugin directory
 ```
 
+Install options:
+
+```text
+--app <path>     override the detected TradingView executable
+--copy           copy TradingView to ~/.local/opt/tradingview first
+--patch          patch the installed/copied app.asar (requires --yes)
+--force          replace an existing user-owned copy
+--yes            required confirmation for --patch
+```
+
 Patch options:
 
 ```text
@@ -98,6 +110,8 @@ Patch options:
 --restart        close TradingView before modifying app.asar
 --yes            required confirmation
 ```
+
+Launch options include `--no-prompt` to fail instead of asking to close a running instance.
 
 Launch options:
 
@@ -116,7 +130,13 @@ Launch options:
 
 The launcher is the default and works with the root-owned AUR install. Patch mode is for users who want the official launcher to start a modified `app.asar` with no inspector.
 
-Patch mode currently requires a **user-writable** install. The simplest way to get one:
+Patch mode requires a **user-writable** install. The one-command path copies the app into `~/.local/opt/tradingview` and patches it without root:
+
+```sh
+tvmod install --copy --patch --yes
+```
+
+The manual equivalent remains:
 
 ```sh
 cp -a /usr/lib/tradingview ~/.local/opt/tradingview
@@ -129,7 +149,7 @@ Then start TradingView normally. The embedded preload runs from the app itself. 
 Notes:
 
 - A 305 MB copy is required; updates to the copy are manual (`cp` the new app, then `tvmod repair --yes`).
-- Root-owned system installs are deliberately refused in v0.3.0 rather than silently elevating.
+- Root-owned system installs are deliberately refused in v0.4.0 rather than silently elevating.
 - Snap installs are read-only and cannot be patched.
 - Backups and hashes live in `~/.local/share/tvmod/backups` and `~/.config/tvmod/state.json`.
 - The patch is applied by extracting the ASAR, appending an inline copy of the preload to the host preload, and repacking with unpacked native modules preserved. It does not depend on a separate `require()` of a file inside the sandboxed preload.
@@ -213,6 +233,8 @@ src/lib/               app detection, inspector client, desktop integration, sta
 src/preload.ts         Electron preload entry
 src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, plugin host, panel
 src/lib/plugin-files.ts plugin validation, embedding, and CLI plugin install
+src/lib/copy-app.ts    user-owned copy installer
+src/lib/restart-prompt.ts running-instance prompt
 examples/plugins/      example external plugin
 test/                  unit tests for logic, boot filters, plugins, and ASAR patching
 docs/                  architecture, plugin SDK, and patch design
@@ -227,6 +249,8 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Local plugin SDK v1 with manifest, permissions, settings, and lifecycle
 - [x] User-level desktop override
 - [x] Optional patch backend for user-writable installs/copies with backup/repair/unpatch
+- [x] One-command user-owned copy + patch installer
+- [x] Restart prompt for a running TradingView instance
 - [ ] Root-owned in-place patching with explicit elevation
 - [ ] Snap validation (inspect binding and preload readability under confinement)
 - [ ] Signed release artifacts and scheduled web census

@@ -23,7 +23,7 @@ import { errorMessage } from './lib/util.js';
 const HELP = `tvmod ${TVMOD_VERSION} - local mods for TradingView Desktop
 
 Usage:
-  tvmod install [--app <path>]
+  tvmod install [--app <path>] [--copy] [--patch] [--force]
   tvmod launch [options]
   tvmod doctor [--app <path>]
   tvmod uninstall [--purge]
@@ -41,6 +41,7 @@ Launch options:
   --restart               close a running TradingView instance first
   --user-data-dir <path>  use a separate profile (development only)
   --no-reload             do not reload a page that loaded before injection
+  --no-prompt             never ask to close a running TradingView instance
   --keep-inspector        leave the main-process inspector open (development)
   --print-pid             print the spawned PID
   --timeout <seconds>     inspector/preload timeout (default: 30)
@@ -48,6 +49,9 @@ Launch options:
 
 Install options:
   --app <path>            override the detected TradingView executable
+  --copy                  copy TradingView to ~/.local/opt/tradingview first
+  --patch                 patch the installed/copied app.asar (requires --yes)
+  --force                 replace an existing user-owned copy
 
 Patch options:
   --app <path>            override the detected TradingView executable
@@ -76,12 +80,15 @@ async function run(): Promise<void> {
       restart: { type: 'boolean', default: false },
       'user-data-dir': { type: 'string' },
       'no-reload': { type: 'boolean', default: false },
+      'no-prompt': { type: 'boolean', default: false },
       'keep-inspector': { type: 'boolean', default: false },
       'print-pid': { type: 'boolean', default: false },
       timeout: { type: 'string' },
       verbose: { type: 'boolean', default: false },
       purge: { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
+      copy: { type: 'boolean', default: false },
+      patch: { type: 'boolean', default: false },
       force: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
@@ -110,7 +117,13 @@ async function run(): Promise<void> {
       return;
 
     case 'install':
-      installCommand({ app });
+      await installCommand({
+        app,
+        copy: Boolean(values.copy),
+        patch: Boolean(values.patch),
+        force: Boolean(values.force),
+        yes: Boolean(values.yes),
+      });
       return;
 
     case 'launch':
@@ -122,6 +135,7 @@ async function run(): Promise<void> {
             ? values['user-data-dir']
             : undefined,
         noReload: Boolean(values['no-reload']),
+        noPrompt: Boolean(values['no-prompt']),
         keepInspector: Boolean(values['keep-inspector']),
         printPid: Boolean(values['print-pid']),
         timeoutSeconds: parseIntOption(values.timeout, 30),

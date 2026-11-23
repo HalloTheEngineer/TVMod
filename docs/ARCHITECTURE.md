@@ -109,6 +109,27 @@ The optional patch backend uses the same preload bundle, but embeds it into the 
 
 `tvmod repair` re-applies after an app update; `tvmod unpatch` restores only when the current hash matches the patched hash. `tvmod launch` detects an active patch and starts the app normally instead of injecting through the launcher a second time. See [PATCHING.md](PATCHING.md).
 
+## Patched-copy installer
+
+`tvmod install --copy --patch --yes` is the one-command path for a root-owned app:
+
+1. Copy the detected app directory to `~/.local/opt/tradingview`.
+2. Detect the copied executable and write state/desktop entries against it.
+3. Patch the copied ASAR with the same verified backup/repair path.
+
+No elevation is used. The copy uses the same TradingView profile, so a running original instance must be closed before launching the copy. Updates to the copy are manual.
+
+## Running-instance prompt
+
+Before launching, `tvmod launch` checks for any running TradingView process when no development `--user-data-dir` is supplied. If one exists:
+
+- `--restart` closes it and continues.
+- otherwise it asks through a TTY prompt, Zenity, or KDialog;
+- `--no-prompt` fails instead of asking;
+- if no prompt mechanism is available, it sends a desktop notification and exits.
+
+The launcher waits for a graceful exit before spawning. Unsaved-changes dialogs in the app can make this fail with an actionable error.
+
 ## Electron compatibility note
 
 Electron 41 still supports `session.getPreloads`/`setPreloads`, but logs them as deprecated in favor of `registerPreloadScript`. A future release should support the new API and keep the legacy path as a fallback.

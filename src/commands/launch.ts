@@ -14,12 +14,13 @@ import { findInstall, type AppInstall } from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
 import { launchLog, logsDir, ensureDir } from '../lib/paths.js';
 import {
-  pidsForInstall,
   terminatePids,
+  tradingViewPids,
   waitForExit,
 } from '../lib/proc.js';
 import { readState } from '../lib/state.js';
 import { debug, fail, heading, info, label, ok, warn } from '../lib/logger.js';
+import { askRestart } from '../lib/restart-prompt.js';
 import {
   errorMessage,
   notify,
@@ -35,6 +36,7 @@ export interface LaunchOptions {
   restart?: boolean;
   userDataDir?: string;
   noReload?: boolean;
+  noPrompt?: boolean;
   keepInspector?: boolean;
   printPid?: boolean;
   timeoutSeconds?: number;
@@ -140,25 +142,13 @@ async function verifyPage(
   return false;
 }
 
-async function launchPatched(
-  install: AppInstall,
-  options: LaunchOptions
-): Promise<void> {
-  const pids = pidsForInstall(install.realExe);
+async function ensureClosedForLaunch(options: LaunchOptions): Promise<void> {
+  if (options.userDataDir) return;
 
-  if (pids.length > 0 && !options.userDataDir) {
-    if (!options.restart) {
-      notify(
-        'TVMod',
-        'TradingView is already running. Close it and click the icon again.'
-      );
-      throw new UserError(
-        `TradingView is already running (PID ${pids.join(
-          ', '
-        )}). Close it and try again, or run "tvmod launch --restart".`
-      );
-    }
+  const pids = tradingViewPids();
+  if (pids.length === 0) return;
 
+  if (options.restart) {
     warn(`closing TradingView (PID ${pids.join(', ')})`);
     terminatePids(pids);
     if (!(await waitForExit(pids))) {
@@ -166,7 +156,48 @@ async function launchPatched(
         'TradingView did not exit. Close it manually and try again.'
       );
     }
+    return;
   }
+
+  if (options.noPrompt) {
+    throw new UserError(
+      `TradingView is already running (PID ${pids.join(
+        ', '
+      )}). Close it and try again, or run "tvmod launch --restart".`
+    );
+  }
+
+  const answer = await askRestart();
+
+  if (answer === 'yes') {
+    warn(`closing TradingView (PID ${pids.join(', ')})`);
+    terminatePids(pids);
+    if (!(await waitForExit(pids))) {
+      throw new UserError(
+        'TradingView did not exit. Close it manually and try again.'
+      );
+    }
+    return;
+  }
+
+  if (answer === 'unavailable') {
+    notify(
+      'TVMod',
+      'TradingView is already running. Close it and click the icon again.'
+    );
+    throw new UserError(
+      'TradingView is already running and no prompt tool is available. Close it and try again.'
+    );
+  }
+
+  throw new UserError('restart cancelled');
+}
+
+async function launchPatched(
+  install: AppInstall,
+  options: LaunchOptions
+): Promise<void> {
+  await ensureClosedForLaunch(options);
 
   ensureDir(logsDir);
   fs.writeFileSync(launchLog, '');
@@ -248,26 +279,7 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
     );
   }
 
-  const pids = pidsForInstall(install.realExe);
-
-  if (pids.length > 0 && !options.userDataDir) {
-    if (!options.restart) {
-      const message = `TradingView is already running (PID ${pids.join(
-        ', '
-      )}). Close it and try again, or run "tvmod launch --restart".`;
-      notify('TVMod', 'TradingView is already running. Close it and click the icon again.');
-      throw new UserError(message);
-    }
-
-    warn(`closing TradingView (PID ${pids.join(', ')})`);
-    terminatePids(pids);
-
-    if (!(await waitForExit(pids))) {
-      throw new UserError(
-        'TradingView did not exit. Close it manually and try again.'
-      );
-    }
-  }
+  await ensureClosedForLaunch(options);
 
   ensureDir(logsDir);
   try {
