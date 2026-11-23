@@ -1,0 +1,25 @@
+{
+  "name": "tvmod",
+  "version": "0.1.0",
+  "description": "Local modification host for TradingView Desktop",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tvmod": "bin/tvmod"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "dev": "npm run build && node dist/cli.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

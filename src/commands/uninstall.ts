@@ -1,0 +1,43 @@
+import fs from 'node:fs';
+import { removeDesktopEntries, removeWrapper } from '../lib/desktop.js';
+import {
+  dataDir,
+  displayPath,
+  stateFile,
+  wrapperPath,
+} from '../lib/paths.js';
+import { removeState, readState } from '../lib/state.js';
+import { heading, label, ok, warn } from '../lib/logger.js';
+
+export interface UninstallOptions {
+  purge?: boolean;
+}
+
+export function uninstallCommand(options: UninstallOptions): void {
+  const state = readState();
+
+  removeDesktopEntries();
+  removeWrapper();
+  removeState();
+
+  if (options.purge) {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+
+  heading('TVMod uninstalled');
+  label('desktop entries', 'removed/restored');
+  label('wrapper', displayPath(wrapperPath));
+  label('state', displayPath(stateFile));
+
+  if (state?.patch) {
+    warn(
+      'This install had a patch record. Re-run your package manager if app files were modified.'
+    );
+  }
+
+  if (!options.purge) {
+    warn('Preload data was left in place; use --purge to remove it.');
+  }
+
+  ok('TradingView will launch unmodified from now on.');
+}
