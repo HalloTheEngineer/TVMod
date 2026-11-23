@@ -1,12 +1,12 @@
 export const PAGE_CSS = `
-html[data-tvmod-no-promos="1"] [class*="desktopUpgrade-"],
-html[data-tvmod-no-promos="1"] [class*="mobileUpgrade-"],
-html[data-tvmod-no-promos="1"] [data-tvmod-promo="1"] {
+html[data-tvmod-adblock="1"] [class*="desktopUpgrade-"],
+html[data-tvmod-adblock="1"] [class*="mobileUpgrade-"],
+html[data-tvmod-adblock="1"] [data-tvmod-promo="1"] {
   display: none !important;
 }
 
-html[data-tvmod-clean-ui="1"] [data-name="ai-copilot-area"],
-html[data-tvmod-clean-ui="1"] [data-name="community-hub-button"] {
+html[data-tvmod-hide-ai="1"] [data-name="ai-copilot-area"],
+html[data-tvmod-hide-community="1"] [data-name="community-hub-button"] {
   display: none !important;
 }
 

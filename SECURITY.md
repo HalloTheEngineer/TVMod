@@ -17,7 +17,7 @@ Anyone who can attach to the inspector during the bootstrap window can execute c
 
 ## Mods and remote code
 
-The v0.1.0 core is bundled into the preload. It does not load remote code or a third-party mod registry. Mods run in the renderer’s page/preload context and do not receive Node.js access from TVMod.
+The v0.2.0 core is bundled into the preload. It does not load remote code or a third-party mod registry. Mods run in the renderer’s page/preload context and do not receive Node.js access from TVMod.
 
 A future mod API must:
 
@@ -30,7 +30,7 @@ A future mod API must:
 
 Patch mode modifies `app.asar` after explicit `--yes` confirmation:
 
-- it refuses Snap and non-writable installs in v0.1.0;
+- it refuses Snap and non-writable installs in v0.2.0;
 - it creates and verifies a backup before replacing the ASAR;
 - `unpatch` only restores a backup when the current ASAR still matches the recorded patched hash;
 - the patched ASAR contains only TVMod code, no TradingView redistribution.
@@ -43,4 +43,4 @@ TVMod intentionally does not touch paywall, trial, entitlement, account, or cred
 
 ## Releases
 
-Release artifacts should be checksummed and signed. The v0.1.0 CI workflow publishes unsigned artifacts; treat them as development builds.
+Release artifacts should be checksummed and signed. The v0.2.0 CI workflow publishes unsigned artifacts; treat them as development builds.

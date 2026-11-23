@@ -64,7 +64,7 @@ function requireWritable(install: AppInstall): void {
   } catch {
     throw new UserError(
       `app.asar is not user-writable:\n  ${install.asar}\n\n` +
-        'The v0.1.0 patch backend only supports user-owned installs or copies. ' +
+        'This build only supports user-owned installs or copies. ' +
         'Use the launcher backend, or install TradingView into a user-owned directory ' +
         'and run "tvmod install --app <path>" against that copy.'
     );

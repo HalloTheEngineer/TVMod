@@ -1,6 +1,6 @@
 # Patch backend
 
-Status: **implemented in v0.1.0 for user-writable installs/copies**. It is optional; the launcher remains the default and the only mode tested against the root-owned AUR install.
+Status: **implemented in v0.2.0 for user-writable installs/copies**. It is optional; the launcher remains the default and the only mode tested against the root-owned AUR install.
 
 ## Why it is optional
 
@@ -12,7 +12,7 @@ TradingView Desktop on Linux is commonly installed as:
 
 The AUR package is replaced on every package update. The official Snap cannot be modified at all. Patching therefore needs write access, is wiped by updates, and must be repaired. The launcher avoids all three problems.
 
-v0.1.0 deliberately refuses root-owned installs instead of silently elevating. Use the launcher, or copy the app into a user-owned directory:
+v0.2.0 deliberately refuses root-owned installs instead of silently elevating. Use the launcher, or copy the app into a user-owned directory:
 
 ```sh
 cp -a /usr/lib/tradingview ~/.local/opt/tradingview
@@ -50,7 +50,7 @@ The preload is embedded rather than `require()`d from a second file because the 
 
 ## Limitations and future work
 
-- Root-owned `/usr/lib` installs are refused in v0.1.0. A future release can offer explicit `sudo`/`pkexec` elevation with ownership-safe path handling.
+- Root-owned `/usr/lib` installs are refused in v0.2.0. A future release can offer explicit `sudo`/`pkexec` elevation with ownership-safe path handling.
 - The patch is lost when a package manager replaces the app; `tvmod repair --yes` is required.
 - macOS is not supported; modifying a signed app bundle can invalidate its signature.
 - Official Snap installs are read-only.

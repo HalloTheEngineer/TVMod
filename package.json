@@ -1,9 +1,17 @@
 {
   "name": "tvmod",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local modification host for TradingView Desktop",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HalloTheEngineer/TVMod.git"
+  },
+  "homepage": "https://github.com/HalloTheEngineer/TVMod",
+  "bugs": {
+    "url": "https://github.com/HalloTheEngineer/TVMod/issues"
+  },
   "bin": {
     "tvmod": "bin/tvmod"
   },

@@ -1,9 +1,14 @@
 import { installBootHooks } from './boot.js';
+import {
+  CONFIG_KEY,
+  isPluginEnabled,
+  loadConfig,
+  saveConfig,
+  type TvmodConfig,
+} from './config.js';
 import { PAGE_CSS } from './css.js';
 import { applyDom, startDomObserver } from './dom.js';
 import { mountPanel, type PanelHandle } from './panel.js';
-import { loadSettings, saveSettings } from './settings.js';
-import type { Settings } from './types.js';
 
 export interface Host {
   executeJavaScript(code: string): Promise<unknown>;
@@ -16,7 +21,7 @@ export function start(version: string, host: Host): void {
   if (started) return;
   started = true;
 
-  let settings: Settings = loadSettings();
+  let config: TvmodConfig = loadConfig();
 
   try {
     host.insertCSS(PAGE_CSS);
@@ -25,7 +30,7 @@ export function start(version: string, host: Host): void {
   }
 
   const bootScript = `(${installBootHooks.toString()})(${JSON.stringify({
-    noPromos: settings.noPromos,
+    adblock: isPluginEnabled(config, 'adblock'),
   })}, ${JSON.stringify({ version, at: Date.now() })});`;
 
   void Promise.resolve(host.executeJavaScript(bootScript)).catch((error) => {
@@ -35,16 +40,16 @@ export function start(version: string, host: Host): void {
   let panel: PanelHandle | null = null;
 
   const onReady = (): void => {
-    applyDom(settings);
+    applyDom(config);
 
     try {
       panel = mountPanel({
         version,
-        getSettings: () => settings,
-        setSettings: (next) => {
-          settings = next;
-          saveSettings(settings);
-          applyDom(settings);
+        getConfig: () => config,
+        setConfig: (next) => {
+          config = next;
+          saveConfig(config);
+          applyDom(config);
           panel?.ensureMounted();
         },
       });
@@ -53,9 +58,16 @@ export function start(version: string, host: Host): void {
     }
 
     startDomObserver(
-      () => settings,
+      () => config,
       () => panel?.ensureMounted()
     );
+
+    window.addEventListener('storage', (event) => {
+      if (event.key !== CONFIG_KEY) return;
+      config = loadConfig();
+      applyDom(config);
+      panel?.refresh();
+    });
   };
 
   if (document.readyState === 'loading') {

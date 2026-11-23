@@ -4,14 +4,15 @@ Local mods for **TradingView Desktop** on Linux.
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.1.0, launcher + optional patch backend**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
+> Status: **v0.2.0, launcher + optional patch backend**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) from the Arch/AUR package. The launcher is the tested default. Patch mode currently supports user-writable installs/copies; root-owned `/usr/lib` patching and Snap validation are future work.
 
 ## Features
 
 - **Promo suppression** — filters `initData.offerButtonInfo`, `user.available_offers`, promo feature flags, upgrade pills, and referral/coupon/three-month toasts.
 - **Clean UI** — hides the AI copilot and community hub buttons by default.
 - **Hide sidebar** — optional; removes the right widget bar.
-- **Mod panel** — `Ctrl+Shift+M` or the floating `TV` button.
+- **Config button** — a gear button inside the chart opens a Vencord-style plugin modal; `Ctrl+Shift+M` also works.
+- **Individual plugins** — toggle Adblock, Hide AI Copilot, Hide Community Hub, and Hide Sidebar independently.
 - **Launcher backend** — installs a preload for the duration of the running app; app updates don’t have to be repaired.
 - **Patch backend** — optionally embeds the preload into a user-owned `app.asar`, with verified backups, `repair`, and `unpatch`.
 - **Vanilla entry** — in launcher mode, a separate “TradingView (Vanilla)” desktop entry is created too.
@@ -19,7 +20,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 ## Requirements
 
 - Linux x64
-- Node.js 22 or newer (the v0.1.0 CLI is a Node bundle)
+- Node.js 22 or newer (the v0.2.0 CLI is a Node bundle)
 - TradingView Desktop installed and launched at least once
 
 Tested with the `tradingview 3.5.0-1` AUR package on CachyOS/Arch. The app layout is detected at install time (`/usr/lib/tradingview`, `/opt/TradingView`, or a custom `--app` path).
@@ -27,8 +28,8 @@ Tested with the `tradingview 3.5.0-1` AUR package on CachyOS/Arch. The app layou
 ## Install from source
 
 ```sh
-git clone <your-fork-url> tvmod
-cd tvmod
+git clone https://github.com/HalloTheEngineer/TVMod.git
+cd TVMod
 npm install
 npm run build
 ./bin/tvmod install
@@ -38,7 +39,7 @@ Then:
 
 1. Close any running TradingView instance.
 2. Start TradingView from your normal icon (the user-level desktop entry is named `tradingview.desktop`).
-3. Press `Ctrl+Shift+M` to open the TVMod panel.
+3. Click the TVMod gear button at the bottom-right of the chart, or press `Ctrl+Shift+M`.
 
 The first launch attaches an inspector to the Electron main process, prepends the preload to the default session, verifies that it is active, and closes the inspector again.
 
@@ -101,10 +102,23 @@ Then start TradingView normally. The embedded preload runs from the app itself. 
 Notes:
 
 - A 305 MB copy is required; updates to the copy are manual (`cp` the new app, then `tvmod repair --yes`).
-- Root-owned system installs are deliberately refused in v0.1.0 rather than silently elevating.
+- Root-owned system installs are deliberately refused in v0.2.0 rather than silently elevating.
 - Snap installs are read-only and cannot be patched.
 - Backups and hashes live in `~/.local/share/tvmod/backups` and `~/.config/tvmod/state.json`.
 - The patch is applied by extracting the ASAR, appending an inline copy of the preload to the host preload, and repacking with unpacked native modules preserved. It does not depend on a separate `require()` of a file inside the sandboxed preload.
+
+## Plugins
+
+The gear button opens a modal with individual plugin toggles:
+
+| Plugin | Default | Notes |
+|---|---|---|
+| Adblock | on | Promo offers, upgrade pills, referral/coupon toasts, promo feature flags. Reload required for boot-time filters. |
+| Hide AI Copilot | on | Removes the AI Copilot button/area. |
+| Hide Community Hub | on | Removes the Community Hub button. |
+| Hide Sidebar | off | Hides the right watchlist/details sidebar. |
+
+The modal includes search, a reload banner when a boot-time plugin changes, and **Reset defaults**. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
 
 ## How it works
 
@@ -156,7 +170,7 @@ src/cli.ts             command dispatcher
 src/commands/          install, launch, doctor, uninstall, patch/repair/unpatch
 src/lib/               app detection, inspector client, desktop integration, state, ASAR patching
 src/preload.ts         Electron preload entry
-src/core/              boot filters, CSS, DOM cleanup, panel, settings
+src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, panel
 test/                  unit tests for pure logic, boot filters, and ASAR patching
 docs/                  architecture and patch design
 ```
@@ -166,6 +180,7 @@ docs/                  architecture and patch design
 - [x] Linux launcher / injector backend
 - [x] Early boot filters and DOM cleanup
 - [x] Mod panel and persisted settings
+- [x] Vencord-style plugin list with individual toggles and search
 - [x] User-level desktop override
 - [x] Optional patch backend for user-writable installs/copies with backup/repair/unpatch
 - [ ] Root-owned in-place patching with explicit elevation

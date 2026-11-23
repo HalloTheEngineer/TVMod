@@ -1,8 +1,8 @@
+import { isPluginEnabled, type TvmodConfig } from './config.js';
 import {
   PROMO_CLASS_SELECTOR,
   PROMO_NAME_SELECTOR,
 } from './css.js';
-import type { Settings } from './types.js';
 
 const HIDDEN_ATTR = 'data-tvmod-promo';
 
@@ -33,15 +33,19 @@ function findPromoContainer(element: Element): Element | null {
   return null;
 }
 
-export function applyDom(settings: Settings): void {
+export function applyDom(config: TvmodConfig): void {
   const root = document.documentElement;
   if (!root) return;
 
-  root.dataset.tvmodNoPromos = settings.noPromos ? '1' : '0';
-  root.dataset.tvmodCleanUi = settings.cleanUi ? '1' : '0';
-  root.dataset.tvmodHideSidebar = settings.hideSidebar ? '1' : '0';
+  const adblock = isPluginEnabled(config, 'adblock');
+  root.dataset.tvmodAdblock = adblock ? '1' : '0';
+  root.dataset.tvmodHideAi = isPluginEnabled(config, 'hide-ai-copilot') ? '1' : '0';
+  root.dataset.tvmodHideCommunity = isPluginEnabled(config, 'hide-community-hub')
+    ? '1'
+    : '0';
+  root.dataset.tvmodHideSidebar = isPluginEnabled(config, 'hide-sidebar') ? '1' : '0';
 
-  if (!settings.noPromos) return;
+  if (!adblock) return;
 
   for (const element of document.querySelectorAll(PROMO_CLASS_SELECTOR)) {
     tagPromo(element);
@@ -55,14 +59,14 @@ export function applyDom(settings: Settings): void {
 }
 
 export function startDomObserver(
-  getSettings: () => Settings,
+  getConfig: () => TvmodConfig,
   onMutation?: () => void
 ): () => void {
   let scheduled = false;
 
   const run = (): void => {
     scheduled = false;
-    applyDom(getSettings());
+    applyDom(getConfig());
     onMutation?.();
   };
 
@@ -78,7 +82,7 @@ export function startDomObserver(
   const observer = new MutationObserver(schedule);
   observer.observe(root, { childList: true, subtree: true });
 
-  applyDom(getSettings());
+  applyDom(getConfig());
   onMutation?.();
 
   return () => observer.disconnect();

@@ -17,13 +17,13 @@
 │ TradingView renderer         │
 │  early boot traps            │
 │  CSS + DOM observer          │
-│  shadow-DOM panel            │
+│  shadow-DOM plugin modal     │
 └──────────────────────────────┘
 ```
 
 ## Launcher
 
-The CLI spawns the detected TradingView executable with `--inspect=127.0.0.1:0`. It reads the inspector WebSocket URL from the launcher log, connects to the Electron main process, and evaluates a small bootstrap.
+The CLI spawns the detected TradingView executable with `--inspect=127.0.0.1:0`. It reads the inspector WebSocket URL from the launcher log, connects to the Electron main process, verifies `process.pid` matches the spawned PID, and evaluates a small bootstrap.
 
 The bootstrap:
 
@@ -39,15 +39,39 @@ If a chart page loaded before the preload was installed, the CLI reloads that pa
 
 The preload embeds the entire core (esbuild bundle, `electron` external). It:
 
+- skips non-top-level frames, local `file://` app pages, login/checkout/pricing routes, and `auth.*` hosts;
 - runs `webFrame.executeJavaScript` before the page’s inline scripts to install accessors for `initData`, `user`, `shopConf`, and `featureToggleState`;
 - inserts page CSS for promo/declutter selectors;
-- after `DOMContentLoaded`, applies DOM tags, mounts the shadow-DOM panel, and starts a `MutationObserver`.
+- after `DOMContentLoaded`, applies DOM tags, mounts the shadow-DOM plugin modal, and starts a throttled `MutationObserver`.
 
-The boot traps remove offer buttons/offers and set known promo feature flags to `0`. Paywall, trial, and entitlement flags are deliberately excluded.
+The boot traps remove offer buttons/offers and set known promo feature flags to `0` when the **Adblock** plugin is enabled. Paywall, trial, and entitlement flags are deliberately excluded.
 
-## Settings
+## Plugin config
 
-Settings live in `localStorage` under `tvmod.settings.v1`. The preload reads them synchronously before installing the boot traps, so boot filtering reflects the user’s choices on the next page load. The panel writes the same key and updates the current page’s CSS attributes immediately.
+Plugins are declared in `src/core/plugins.ts`:
+
+- `adblock` (default on, reload required for boot filters)
+- `hide-ai-copilot` (default on)
+- `hide-community-hub` (default on)
+- `hide-sidebar` (default off)
+
+State is stored in `localStorage` under `tvmod.config.v2`:
+
+```json
+{
+  "version": 2,
+  "plugins": {
+    "adblock": { "enabled": true },
+    "hide-ai-copilot": { "enabled": true },
+    "hide-community-hub": { "enabled": true },
+    "hide-sidebar": { "enabled": false }
+  }
+}
+```
+
+The preload reads this synchronously before installing the boot traps, so boot filtering reflects the user’s choices on the next page load. The plugin modal writes the same key and updates the current page’s CSS attributes immediately. The legacy `tvmod.settings.v1` flat layout is migrated on first load.
+
+A gear button at the bottom-right of TradingView opens the modal. `Ctrl+Shift+M` toggles it; search filters the plugin list; a reload banner appears when Adblock changes; **Reset defaults** restores the plugin defaults.
 
 ## Desktop integration
 

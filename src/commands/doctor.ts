@@ -61,7 +61,7 @@ export function doctorCommand(options: DoctorOptions): void {
       warn('Run "tvmod install" again to refresh the launcher metadata.');
     }
     if (state.patch) {
-      label('patch', `${state.patch.appVersion ?? 'unknown'} (not active in v0.1.0)`);
+      label('patch', `${state.patch.appVersion ?? 'unknown'} (patch mode)`);
     }
   } else {
     warn('TVMod is not installed; run "tvmod install"');
