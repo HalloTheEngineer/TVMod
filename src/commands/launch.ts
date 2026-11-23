@@ -1,3 +1,4 @@
+import { TVMOD_VERSION } from '../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -201,7 +202,7 @@ async function launchPatched(
     throw new UserError(`TradingView did not start.\n\n${tailFile(launchLog)}`);
   }
 
-  heading(`TVMod ${__TVMOD_VERSION__} (patched install)`);
+  heading(`TVMod ${TVMOD_VERSION} (patched install)`);
   label('TradingView', install.version ?? 'unknown');
   label('pid', String(child.pid));
   if (options.printPid) info(`pid=${child.pid}`);
@@ -352,7 +353,7 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
     await waitForPreload(client, state.preloadPath, timeoutMs);
     debug('preload confirmed');
 
-    heading(`TVMod ${__TVMOD_VERSION__}`);
+    heading(`TVMod ${TVMOD_VERSION}`);
     label('TradingView', install.version ?? 'unknown');
     label('pid', String(child.pid));
     label('preload', state.preloadPath);

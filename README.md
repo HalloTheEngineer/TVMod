@@ -20,10 +20,30 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 ## Requirements
 
 - Linux x64
-- Node.js 22 or newer (the v0.2.0 CLI is a Node bundle)
+- **Release artifact:** no Node.js required; the launcher is a self-contained Bun binary.
+- **Source build:** Node.js 22 or newer plus Bun 1.3.8 for the standalone binary.
 - TradingView Desktop installed and launched at least once
 
 Tested with the `tradingview 3.5.0-1` AUR package on CachyOS/Arch. The app layout is detected at install time (`/usr/lib/tradingview`, `/opt/TradingView`, or a custom `--app` path).
+
+## Install from a release
+
+Download `tvmod-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the GitHub Releases page, then run:
+
+```sh
+sha256sum -c SHA256SUMS
+tar -xzf tvmod-0.2.0-linux-x64.tar.gz
+cd tvmod-0.2.0-linux-x64
+./tvmod install
+```
+
+Then close TradingView and start it from your normal icon. The release binary does not need Node.js.
+
+To verify the GitHub build provenance:
+
+```sh
+gh attestation verify tvmod-0.2.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+```
 
 ## Install from source
 
@@ -32,6 +52,7 @@ git clone https://github.com/HalloTheEngineer/TVMod.git
 cd TVMod
 npm install
 npm run build
+npm run build:binary   # optional standalone Linux binary
 ./bin/tvmod install
 ```
 
@@ -158,7 +179,9 @@ See [SECURITY.md](SECURITY.md) and [docs/PATCHING.md](docs/PATCHING.md).
 ## Development
 
 ```sh
-npm run build       # dist/cli.mjs + dist/preload.cjs
+npm run build          # dist/cli.mjs + dist/preload.cjs
+npm run build:binary   # dist/tvmod standalone Linux binary
+npm run package:release # release/tvmod-<version>-linux-x64.tar.gz
 npm run typecheck
 npm test
 ```

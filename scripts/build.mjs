@@ -15,9 +15,6 @@ const common = {
   sourcemap: true,
   logLevel: 'info',
   legalComments: 'none',
-  define: {
-    __TVMOD_VERSION__: JSON.stringify(pkg.version),
-  },
 };
 
 await build({

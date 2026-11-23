@@ -6,6 +6,7 @@ import {
   desktopDir,
   desktopFile,
   ensureDir,
+  isStandaloneBinary,
   vanillaDesktopFile,
   wrapperBackupFile,
   wrapperPath as wrapperFilePath,
@@ -41,8 +42,8 @@ export function writeWrapper(cliEntry: string): string {
     backupOnce(wrapperFilePath, wrapperBackupFile);
   }
 
-  const bun = Boolean((process.versions as Record<string, string | undefined>).bun);
-  const content = bun
+  const standalone = isStandaloneBinary();
+  const content = standalone
     ? `#!/bin/sh\n${WRAPPER_MARKER}\nexec ${quoteDesktopArg(process.execPath)} "$@"\n`
     : `#!/bin/sh\n${WRAPPER_MARKER}\nexec ${quoteDesktopArg(
         process.execPath

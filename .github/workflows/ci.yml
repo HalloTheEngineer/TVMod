@@ -36,3 +36,35 @@ jobs:
           name: tvmod-dist
           path: dist/
           if-no-files-found: error
+
+  binary:
+    name: Standalone Linux binary
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:binary
+      - run: ./dist/tvmod --version
+      - run: npm run package:release
+      - run: sha256sum -c SHA256SUMS
+        working-directory: release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tvmod-linux-x64
+          path: release/
+          if-no-files-found: error

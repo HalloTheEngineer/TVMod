@@ -20,6 +20,8 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:binary": "node scripts/build-binary.mjs",
+    "package:release": "node scripts/package-release.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "dev": "npm run build && node dist/cli.mjs"

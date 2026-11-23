@@ -1,7 +1,8 @@
+import { TVMOD_VERSION } from './version.js';
 import { contextBridge, webFrame } from 'electron';
 import { start } from './core/index.js';
 
-const VERSION = __TVMOD_VERSION__;
+const VERSION = TVMOD_VERSION;
 
 function isTopFrame(): boolean {
   try {

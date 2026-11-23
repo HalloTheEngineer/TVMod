@@ -1,3 +1,4 @@
+import { TVMOD_VERSION } from '../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { findInstall, type AppInstall } from '../lib/app-detect.js';
@@ -168,7 +169,7 @@ export async function patchCommand(options: PatchOptions): Promise<void> {
 
   const result = await applyPatch(state, install);
 
-  heading(`TVMod ${__TVMOD_VERSION__} patch`);
+  heading(`TVMod ${TVMOD_VERSION} patch`);
   label('TradingView', install.version ?? 'unknown');
   label('app.asar', install.asar ?? 'unknown');
   label('backup', displayPath(state.patch?.backupPath ?? ''));
@@ -208,7 +209,7 @@ export async function repairCommand(options: PatchOptions): Promise<void> {
   await ensureStopped(install, options.restart);
   const result = await applyPatch(state, install);
 
-  heading(`TVMod ${__TVMOD_VERSION__} repair`);
+  heading(`TVMod ${TVMOD_VERSION} repair`);
   label('TradingView', install.version ?? 'unknown');
   label('app.asar', install.asar);
   label('backup', displayPath(state.patch?.backupPath ?? ''));
@@ -269,7 +270,7 @@ export async function unpatchCommand(options: PatchOptions): Promise<void> {
   delete state.patch;
   writeState(state);
 
-  heading(`TVMod ${__TVMOD_VERSION__} unpatch`);
+  heading(`TVMod ${TVMOD_VERSION} unpatch`);
   label('app.asar', install.asar);
   ok('original app.asar restored.');
 }

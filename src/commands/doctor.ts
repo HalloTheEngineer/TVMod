@@ -1,3 +1,4 @@
+import { TVMOD_VERSION } from '../version.js';
 import fs from 'node:fs';
 import {
   candidatePaths,
@@ -25,9 +26,10 @@ export function doctorCommand(options: DoctorOptions): void {
   const state = readState();
   const install = findInstall(options.app ?? state?.app.exe);
 
-  heading(`TVMod ${__TVMOD_VERSION__}`);
+  heading(`TVMod ${TVMOD_VERSION}`);
   label('host', `${process.platform} ${process.arch}`);
-  label('node', process.version);
+  const bun = (process.versions as Record<string, string | undefined>).bun;
+  label('runtime', bun ? `bun ${bun}` : `node ${process.version}`);
 
   if (!install) {
     warn('TradingView Desktop was not found.');

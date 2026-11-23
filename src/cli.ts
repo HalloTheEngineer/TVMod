@@ -1,3 +1,4 @@
+import { TVMOD_VERSION } from './version.js';
 import { parseArgs } from 'node:util';
 import { doctorCommand } from './commands/doctor.js';
 import { installCommand } from './commands/install.js';
@@ -12,7 +13,7 @@ import {
 } from './lib/logger.js';
 import { errorMessage } from './lib/util.js';
 
-const HELP = `tvmod ${__TVMOD_VERSION__} - local mods for TradingView Desktop
+const HELP = `tvmod ${TVMOD_VERSION} - local mods for TradingView Desktop
 
 Usage:
   tvmod install [--app <path>]
@@ -79,7 +80,7 @@ async function run(): Promise<void> {
   }
 
   if (values.version) {
-    info(__TVMOD_VERSION__);
+    info(TVMOD_VERSION);
     return;
   }
 

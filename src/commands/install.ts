@@ -1,3 +1,4 @@
+import { TVMOD_VERSION } from '../version.js';
 import fs from 'node:fs';
 import {
   candidatePaths,
@@ -64,7 +65,7 @@ export function installCommand(options: InstallOptions): void {
 
   writeState({
     schema: 1,
-    coreVersion: __TVMOD_VERSION__,
+    coreVersion: TVMOD_VERSION,
     installedAt: new Date().toISOString(),
     app: {
       exe: install.exe,
@@ -88,7 +89,7 @@ export function installCommand(options: InstallOptions): void {
     warn('the previous patch record pointed at a different app.asar and was dropped.');
   }
 
-  heading(`TVMod ${__TVMOD_VERSION__} installed`);
+  heading(`TVMod ${TVMOD_VERSION} installed`);
   label('TradingView', `${install.version ?? 'unknown version'} (${describeFlavor(install.flavor)})`);
   label('executable', install.exe);
   label('app.asar', install.asar ?? 'not found (launcher only)');

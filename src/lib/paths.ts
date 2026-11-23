@@ -38,8 +38,15 @@ export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+export function isStandaloneBinary(): boolean {
+  const bun = Boolean(
+    (process.versions as Record<string, string | undefined>).bun
+  );
+  return bun && path.basename(process.execPath) !== 'bun';
+}
+
 export function preloadSourcePath(): string {
-  const entry = process.argv[1];
+  const entry = isStandaloneBinary() ? process.execPath : process.argv[1];
   if (!entry) {
     throw new Error('cannot determine the tvmod entry point');
   }
