@@ -3,6 +3,7 @@ import path from 'node:path';
 import { isBuiltinPluginId } from '../core/plugins.js';
 import {
   ALLOWED_PERMISSIONS,
+  isPluginCategory,
   isPluginPermission,
   type EmbeddedPlugin,
   type ExternalPluginManifest,
@@ -267,6 +268,18 @@ export function validateManifest(raw: unknown): ExternalPluginManifest {
   }
   if (value.defaultEnabled !== undefined && typeof value.defaultEnabled !== 'boolean') {
     throw new Error('defaultEnabled must be a boolean');
+  }
+
+  if (value.category !== undefined) {
+    if (
+      typeof value.category !== 'string' ||
+      !isPluginCategory(value.category)
+    ) {
+      throw new Error('category must be ads, interface, accessibility, tools, or other');
+    }
+    manifest.category = value.category;
+  } else {
+    manifest.category = 'other';
   }
 
   return manifest;

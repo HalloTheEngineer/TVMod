@@ -6,6 +6,8 @@ import { launchCommand } from './commands/launch.js';
 import { patchCommand, repairCommand, unpatchCommand } from './commands/patch.js';
 import {
   pluginAddCommand,
+  pluginAddExampleCommand,
+  pluginExamplesCommand,
   pluginListCommand,
   pluginPathCommand,
   pluginRefreshCommand,
@@ -41,6 +43,8 @@ Usage:
   tvmod repair [--app <path>] [--restart] [--system] --yes
   tvmod unpatch [--app <path>] [--restart] [--system] --yes
   tvmod plugin add <dir> [--force]
+  tvmod plugin examples
+  tvmod plugin add-example <id> [--force]
   tvmod plugin list
   tvmod plugin remove <id> --yes
   tvmod plugin refresh
@@ -222,6 +226,14 @@ async function run(): Promise<void> {
       switch (subcommand) {
         case 'add':
           await pluginAddCommand(arg, { force: Boolean(values.force) });
+          return;
+        case 'examples':
+          pluginExamplesCommand();
+          return;
+        case 'add-example':
+          await pluginAddExampleCommand(arg, {
+            force: Boolean(values.force),
+          });
           return;
         case 'list':
           pluginListCommand();

@@ -11,9 +11,12 @@ import type {
   RegistrySource,
 } from './host.js';
 import { planRegistryUpdates } from './registry-updates.js';
-import type {
-  PanelPlugin,
-  PluginSettingValue,
+import {
+  PLUGIN_CATEGORY_LABELS,
+  PLUGIN_CATEGORY_ORDER,
+  type PanelPlugin,
+  type PluginCategory,
+  type PluginSettingValue,
 } from './plugin-types.js';
 
 const PANEL_ID = 'tvmod-root';
@@ -57,8 +60,8 @@ const PANEL_STYLE = `
     pointer-events: auto; position: fixed; top: 50%; left: 50%;
     transform: translate(-50%, -50%); z-index: 11;
     display: flex; flex-direction: column;
-    width: min(480px, calc(100vw - 32px));
-    max-height: min(680px, 82vh); overflow: hidden;
+    width: min(860px, calc(100vw - 48px));
+    max-height: min(900px, calc(100vh - 48px)); overflow: hidden;
     border: 1px solid #3a3f46; border-radius: 14px; background: #14171b;
     color: #e9ecef;
     font: 12px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -89,7 +92,22 @@ const PANEL_STYLE = `
   .search:focus { border-color: #4c8dff; }
   .count { flex: none; color: #8f98a3; font-size: 11px; white-space: nowrap; }
 
-  .plugins { min-height: 0; overflow: auto; padding: 0 10px 10px; }
+  .plugins { min-height: 0; overflow: auto; padding: 0 12px 12px; }
+
+  .plugin-category + .plugin-category { margin-top: 10px; }
+  .category-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin: 0 4px 4px; padding: 5px 6px 5px;
+    border-bottom: 1px solid #22272e;
+  }
+  .category-title {
+    color: #77808b; font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.7px; text-transform: uppercase;
+  }
+  .category-count {
+    padding: 0 5px; border: 1px solid #2b3138; border-radius: 999px;
+    color: #77808b; font-size: 9px;
+  }
 
   .plugin {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -730,8 +748,41 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     return card;
   };
 
-  for (const plugin of options.plugins) {
-    list.append(buildCard(plugin));
+  const categorySections = new Map<
+    PluginCategory,
+    { section: HTMLElement; count: HTMLElement }
+  >();
+
+  for (const category of PLUGIN_CATEGORY_ORDER) {
+    const plugins = options.plugins.filter(
+      (plugin) => plugin.category === category
+    );
+    if (plugins.length === 0) continue;
+
+    const section = document.createElement('section');
+    section.className = 'plugin-category';
+    section.dataset.category = category;
+
+    const head = document.createElement('div');
+    head.className = 'category-head';
+
+    const title = document.createElement('span');
+    title.className = 'category-title';
+    title.textContent = PLUGIN_CATEGORY_LABELS[category];
+
+    const count = document.createElement('span');
+    count.className = 'category-count';
+    count.textContent = String(plugins.length);
+
+    head.append(title, count);
+    section.append(head);
+
+    for (const plugin of plugins) {
+      section.append(buildCard(plugin));
+    }
+
+    list.append(section);
+    categorySections.set(category, { section, count });
   }
 
   const empty = document.createElement('div');
@@ -1353,13 +1404,24 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
     const query = (search?.value ?? '').trim().toLowerCase();
     let visible = 0;
+    const categoryVisible = new Map<PluginCategory, number>();
 
     for (const plugin of options.plugins) {
       const entry = cards.get(plugin.id);
       if (!entry) continue;
       const matches = !query || entry.card.dataset.search?.includes(query);
       entry.card.hidden = !matches;
-      if (matches) visible += 1;
+      if (matches) {
+        visible += 1;
+        categoryVisible.set(
+          plugin.category,
+          (categoryVisible.get(plugin.category) ?? 0) + 1
+        );
+      }
+    }
+
+    for (const [category, section] of categorySections) {
+      section.section.hidden = (categoryVisible.get(category) ?? 0) === 0;
     }
 
     empty.hidden = visible > 0;

@@ -1,10 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   ALLOWED_PERMISSIONS,
   type ExternalPluginManifest,
 } from '../core/plugin-types.js';
 import {
   installPluginDirectory,
+  isPluginId,
   readInstalledPlugins,
+  readPluginDirectory,
   removePluginDirectory,
   writeInstalledPreload,
 } from '../lib/plugin-files.js';
@@ -16,6 +20,7 @@ import {
 import { UserError } from '../lib/errors.js';
 import {
   displayPath,
+  examplesDir,
   pluginsDir,
   preloadTargetForFlavor,
 } from '../lib/paths.js';
@@ -163,4 +168,83 @@ export async function pluginRefreshCommand(): Promise<void> {
 
 export function pluginPathCommand(): void {
   info(pluginsDir);
+}
+
+export function pluginExamplesCommand(): void {
+  const root = examplesDir();
+  if (!root) {
+    throw new UserError(
+      'bundled examples were not found. Use a release archive or a source checkout.'
+    );
+  }
+
+  heading('Bundled example plugins');
+  label('directory', displayPath(root));
+
+  let found = 0;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const plugin = readPluginDirectory(path.join(root, entry.name));
+      found += 1;
+      info(
+        `  ${plugin.manifest.id}  v${plugin.manifest.version}  ${plugin.manifest.name}`
+      );
+      if (plugin.manifest.description) {
+        info(`      ${plugin.manifest.description}`);
+      }
+    } catch (error) {
+      warn(
+        `${entry.name}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  if (found === 0) {
+    info('  no valid examples found');
+    return;
+  }
+
+  info('');
+  info('Install one with: tvmod plugin add-example <id>');
+}
+
+export async function pluginAddExampleCommand(
+  id: string | undefined,
+  options: PluginAddOptions
+): Promise<void> {
+  if (!id) {
+    throw new UserError('usage: tvmod plugin add-example <id> [--force]');
+  }
+  if (!isPluginId(id)) {
+    throw new UserError(`invalid example id: ${id}`);
+  }
+
+  const root = examplesDir();
+  if (!root) {
+    throw new UserError(
+      'bundled examples were not found. Use a release archive or a source checkout.'
+    );
+  }
+
+  const source = path.join(root, id);
+  const resolvedRoot = `${path.resolve(root)}${path.sep}`;
+  const resolvedSource = path.resolve(source);
+  if (!resolvedSource.startsWith(resolvedRoot)) {
+    throw new UserError(`invalid example id: ${id}`);
+  }
+
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(resolvedSource);
+  } catch {
+    throw new UserError(`unknown example: ${id} (run "tvmod plugin examples")`);
+  }
+  if (!stat.isDirectory()) {
+    throw new UserError(`unknown example: ${id} (run "tvmod plugin examples")`);
+  }
+
+  await pluginAddCommand(resolvedSource, options);
 }

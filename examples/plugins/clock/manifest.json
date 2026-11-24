@@ -1,0 +1,43 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "description": "Adds a floating local clock with optional seconds and date.",
+  "version": "1.0.0",
+  "author": "TVMod",
+  "main": "index.js",
+  "defaultEnabled": false,
+  "category": "tools",
+  "permissions": ["dom", "style"],
+  "settings": [
+    {
+      "key": "position",
+      "name": "Position",
+      "type": "select",
+      "default": "bottom-left",
+      "options": [
+        { "value": "bottom-left", "label": "Bottom left" },
+        { "value": "bottom-right", "label": "Bottom right" },
+        { "value": "top-left", "label": "Top left" },
+        { "value": "top-right", "label": "Top right" }
+      ]
+    },
+    {
+      "key": "showSeconds",
+      "name": "Show seconds",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "hour12",
+      "name": "12-hour clock",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "showDate",
+      "name": "Show date",
+      "type": "boolean",
+      "default": false
+    }
+  ]
+}

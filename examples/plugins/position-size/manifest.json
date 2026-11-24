@@ -1,0 +1,41 @@
+{
+  "id": "position-size",
+  "name": "Position Size Calculator",
+  "description": "Calculates position size from account size, risk percent, entry, and stop. Calculation only; not financial advice.",
+  "version": "1.0.0",
+  "author": "TVMod",
+  "main": "index.js",
+  "defaultEnabled": false,
+  "category": "tools",
+  "permissions": ["dom", "style", "storage"],
+  "settings": [
+    {
+      "key": "position",
+      "name": "Position",
+      "type": "select",
+      "default": "bottom-right",
+      "options": [
+        { "value": "bottom-left", "label": "Bottom left" },
+        { "value": "bottom-right", "label": "Bottom right" }
+      ]
+    },
+    {
+      "key": "accountSize",
+      "name": "Default account size",
+      "type": "number",
+      "default": 10000,
+      "min": 0,
+      "max": 1000000000,
+      "step": 100
+    },
+    {
+      "key": "riskPercent",
+      "name": "Default risk percent",
+      "type": "number",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "step": 0.1
+    }
+  ]
+}

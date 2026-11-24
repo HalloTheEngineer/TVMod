@@ -6,6 +6,7 @@
   "author": "TVMod",
   "main": "index.js",
   "defaultEnabled": false,
+  "category": "tools",
   "permissions": ["dom", "style", "storage"],
   "settings": [
     {

@@ -50,6 +50,7 @@ test('normalizeConfig merges external plugin settings with defaults', () => {
     name: 'External',
     description: 'test',
     defaultEnabled: false,
+    category: 'tools' as const,
     external: true,
     settings: [
       { key: 'foo', name: 'Foo', type: 'boolean' as const, default: true },
@@ -82,6 +83,7 @@ test('normalizeConfig validates typed setting values', () => {
     name: 'Typed',
     description: '',
     defaultEnabled: true,
+    category: 'tools' as const,
     external: true,
     settings: [
       { key: 'flag', name: 'Flag', type: 'boolean', default: true },
@@ -145,6 +147,7 @@ test('normalizeConfig accepts typed values within their constraints', () => {
     name: 'Typed',
     description: '',
     defaultEnabled: false,
+    category: 'tools' as const,
     external: true,
     settings: [
       { key: 'text', name: 'Text', type: 'string', default: 'hello' },

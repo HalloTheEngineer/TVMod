@@ -1,4 +1,5 @@
 import {
+  isPluginCategory,
   isPluginPermission,
   type EmbeddedPlugin,
   type ExternalPluginManifest,
@@ -143,6 +144,11 @@ function normalizeManifest(raw: unknown): ExternalPluginManifest | null {
     }
   }
 
+  const category =
+    typeof value.category === 'string' && isPluginCategory(value.category)
+      ? value.category
+      : 'other';
+
   return {
     id: value.id,
     name: value.name,
@@ -153,6 +159,7 @@ function normalizeManifest(raw: unknown): ExternalPluginManifest | null {
     defaultEnabled: value.defaultEnabled === true,
     permissions: permissions && permissions.length > 0 ? permissions : undefined,
     settings: settings.length > 0 ? settings : undefined,
+    category,
   };
 }
 
@@ -186,6 +193,7 @@ export function toPanelPlugin(manifest: ExternalPluginManifest): PanelPlugin {
     description: manifest.description,
     defaultEnabled: manifest.defaultEnabled === true,
     external: true,
+    category: manifest.category ?? 'other',
     version: manifest.version,
     author: manifest.author,
     permissions: manifest.permissions,

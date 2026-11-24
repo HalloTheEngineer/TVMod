@@ -42,6 +42,7 @@ after changing plugins, because the patched `app.asar` contains a snapshot of th
   "author": "TVMod",
   "main": "index.js",
   "defaultEnabled": false,
+  "category": "tools",
   "permissions": ["dom", "style", "storage"],
   "settings": [
     {
@@ -85,6 +86,7 @@ Rules:
 - `id` is lowercase `[a-z0-9._-]`, unique, and cannot collide with a built-in plugin.
 - `main` is a single `.js` filename inside the plugin directory. Plugins are single-file; local asset loading is not exposed.
 - `defaultEnabled` defaults to `false` for external plugins.
+- `category` is `ads`, `interface`, `accessibility`, `tools`, or `other`; it controls the modal section. Defaults to `other`.
 - `permissions` may contain `dom`, `style`, `storage`, and `events`.
 - Manifest size is limited to 64 KiB; source is limited to 512 KiB.
 - Up to 32 settings are allowed.
@@ -233,6 +235,23 @@ Plugins are local JavaScript. They run in the renderer preload context with the 
 The API intentionally does not expose TradingView's internal JavaScript globals. Direct `window.TradingView` access would require a future permissioned capability.
 
 Events are isolated to the current renderer. A plugin with `events` can observe events emitted by other plugins in the same page, so avoid sending credentials or private data through the bus.
+
+## Bundled examples
+
+The release archive ships runnable examples:
+
+```sh
+tvmod plugin examples
+tvmod plugin add-example clock
+tvmod plugin add-example symbol-notes
+tvmod plugin add-example position-size
+```
+
+- **Clock** — typed settings, interval lifecycle, in-place setting updates.
+- **Per-Symbol Notes** — title observation, namespaced storage, floating editor.
+- **Position Size Calculator** — typed numeric settings, persistence, calculation UI.
+
+`add-example` resolves `examples/plugins/<id>` next to the binary or in a source checkout, rejects unsafe ids, and uses the normal install/reload path.
 
 ## Compatibility
 

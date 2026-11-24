@@ -5,6 +5,78 @@ import {
 } from './css.js';
 
 const HIDDEN_ATTR = 'data-tvmod-promo';
+const SIDEBAR_FORCED_KEY = 'tvmod.sidebar.forced';
+
+function readForcedSidebar(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_FORCED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setForcedSidebar(value: boolean): void {
+  forcedSidebar = value;
+  try {
+    if (value) {
+      localStorage.setItem(SIDEBAR_FORCED_KEY, '1');
+    } else {
+      localStorage.removeItem(SIDEBAR_FORCED_KEY);
+    }
+  } catch {
+    // localStorage may be unavailable.
+  }
+}
+
+let forcedSidebar = readForcedSidebar();
+let sidebarActionAt = 0;
+
+function scheduleSidebarStateRefresh(requestedCollapsed: boolean): void {
+  window.setTimeout(() => {
+    const area = document.querySelector<HTMLElement>('.layout__area--right');
+    if (!area) return;
+    const collapsedNow = area.getBoundingClientRect().width <= 60;
+    document.documentElement.dataset.tvmodSidebarCollapsed =
+      collapsedNow ? '1' : '0';
+    if (!collapsedNow && !requestedCollapsed) setForcedSidebar(false);
+  }, 700);
+}
+
+function updateSidebarLayout(root: HTMLElement, collapsed: boolean): void {
+  const area = document.querySelector<HTMLElement>('.layout__area--right');
+  const center = document.querySelector<HTMLElement>('.layout__area--center');
+  if (!area) {
+    root.dataset.tvmodSidebarCollapsed = '0';
+    return;
+  }
+
+  const isCollapsed = area.getBoundingClientRect().width <= 60;
+  root.dataset.tvmodSidebarCollapsed = isCollapsed ? '1' : '0';
+  if (center) {
+    root.style.setProperty('--tvmod-center-left', `${center.offsetLeft}px`);
+  }
+
+  const base = document.querySelector<HTMLElement>('[data-name="base"]');
+  if (!base) return;
+
+  if (Date.now() - sidebarActionAt < 500) return;
+
+  if (collapsed && !isCollapsed) {
+    base.click();
+    setForcedSidebar(true);
+    sidebarActionAt = Date.now();
+    scheduleSidebarStateRefresh(collapsed);
+  } else if (!collapsed && isCollapsed && forcedSidebar) {
+    // Keep forcedSidebar until the sidebar is actually expanded. The toggle
+    // can be hidden by Hide Right Toolbar/Focus Mode, in which case the click
+    // is a no-op until those plugins are disabled.
+    base.click();
+    sidebarActionAt = Date.now();
+    scheduleSidebarStateRefresh(collapsed);
+  } else if (!collapsed && !isCollapsed) {
+    setForcedSidebar(false);
+  }
+}
 
 function tagPromo(element: Element): void {
   if (!element.hasAttribute(HIDDEN_ATTR)) {
@@ -37,13 +109,51 @@ export function applyDom(config: TvmodConfig): void {
   const root = document.documentElement;
   if (!root) return;
 
+  const hideSidebar = isPluginEnabled(config, 'hide-sidebar');
+  const hideRightToolbar = isPluginEnabled(config, 'hide-right-toolbar');
+  const hideWatchlist = isPluginEnabled(config, 'hide-watchlist');
+  const hideDetails = isPluginEnabled(config, 'hide-details');
+  const hideBottomControls = isPluginEnabled(config, 'hide-bottom-controls');
+  const focusMode = isPluginEnabled(config, 'focus-mode');
+
   const adblock = isPluginEnabled(config, 'adblock');
   root.dataset.tvmodAdblock = adblock ? '1' : '0';
   root.dataset.tvmodHideAi = isPluginEnabled(config, 'hide-ai-copilot') ? '1' : '0';
   root.dataset.tvmodHideCommunity = isPluginEnabled(config, 'hide-community-hub')
     ? '1'
     : '0';
-  root.dataset.tvmodHideSidebar = isPluginEnabled(config, 'hide-sidebar') ? '1' : '0';
+  root.dataset.tvmodHideSidebar = hideSidebar ? '1' : '0';
+  // Keep the native sidebar toggle clickable while resolving sidebar state.
+  root.dataset.tvmodHideRightToolbar = '0';
+  root.dataset.tvmodFocus = '0';
+  root.dataset.tvmodHideWatchlist = hideWatchlist ? '1' : '0';
+  root.dataset.tvmodHideDetails = hideDetails ? '1' : '0';
+  root.dataset.tvmodHideBottomControls = hideBottomControls ? '1' : '0';
+  root.dataset.tvmodHideToolbarExtras = isPluginEnabled(
+    config,
+    'hide-toolbar-extras'
+  )
+    ? '1'
+    : '0';
+  root.dataset.tvmodHideTradeButtons = isPluginEnabled(
+    config,
+    'hide-trade-buttons'
+  )
+    ? '1'
+    : '0';
+  root.dataset.tvmodReduceMotion = isPluginEnabled(config, 'reduce-motion')
+    ? '1'
+    : '0';
+
+  updateSidebarLayout(
+    root,
+    hideSidebar ||
+      focusMode ||
+      (hideWatchlist && hideDetails)
+  );
+
+  root.dataset.tvmodHideRightToolbar = hideRightToolbar ? '1' : '0';
+  root.dataset.tvmodFocus = focusMode ? '1' : '0';
 
   if (!adblock) return;
 

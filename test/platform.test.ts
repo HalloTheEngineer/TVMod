@@ -8,7 +8,7 @@ import {
   inspectInstallPath,
   installRoot,
 } from '../src/lib/app-detect.js';
-import { computePaths } from '../src/lib/paths.js';
+import { computePaths, findExamplesDir } from '../src/lib/paths.js';
 
 test('platform paths follow native config locations', () => {
   const linux = computePaths('linux', '/home/u', {});
@@ -76,6 +76,28 @@ test('inspectInstallPath detects Linux, macOS, Windows, and MSIX layouts', () =>
     const msix = inspectInstallPath(msixDir, 'win32');
     assert.equal(msix?.flavor, 'msix');
     assert.equal(msix?.exe, path.join(msixDir, 'TradingView.exe'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('bundled examples resolve next to a release binary or a dev build', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tvmod-examples-'));
+
+  try {
+    const examples = path.join(root, 'examples', 'plugins');
+    fs.mkdirSync(path.join(examples, 'clock'), { recursive: true });
+    assert.equal(findExamplesDir(path.join(root, 'tvmod')), examples);
+
+    fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+    assert.equal(
+      findExamplesDir(path.join(root, 'dist', 'cli.mjs')),
+      examples
+    );
+    assert.equal(
+      findExamplesDir(path.join(root, 'dist', 'deeper', 'cli.mjs')),
+      null
+    );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

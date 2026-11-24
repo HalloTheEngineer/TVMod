@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and 
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.12.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
+> Status: **v0.13.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + a categorized cleanup pack + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
@@ -12,7 +12,9 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Clean UI** — hides the AI copilot and community hub buttons by default.
 - **Hide sidebar** — optional; removes the right widget bar.
 - **Config button** — a gear button inside the chart opens a Vencord-style plugin modal; `Ctrl+Shift+M` also works.
-- **Individual plugins** — toggle Adblock, Hide AI Copilot, Hide Community Hub, and Hide Sidebar independently.
+- **Individual plugins** — a categorized cleanup pack with sidebar, toolbar, trade-button, focus-mode, and motion controls.
+- **Categorized plugin screen** — a larger plugin modal groups plugins into Ads, Interface, Accessibility, Tools, and Other.
+- **Bundled example plugins** — install Clock, Per-Symbol Notes, and Position Size Calculator with `tvmod plugin add-example`.
 - **Plugin SDK v2** — single-file plugins with typed settings, lifecycle hooks, registered cleanup, and a permissioned plugin event bus.
 - **Signed plugin registry** — Ed25519-signed indexes/bundles, SHA-256 verification, pinned registry keys, and CLI browse/install.
 - **Registry browser** — a Registry tab in the gear modal lists configured registries, filters plugins, installs or updates them, and manages registry keys from the panel.
@@ -89,12 +91,12 @@ To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 ```sh
 cosign verify-blob \
   --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.12.0 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.13.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.12.0` verifies every archive signature and the combined checksum.
+The repo helper `tools/verify-release.sh 0.13.0` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -135,6 +137,8 @@ tvmod patch --yes                embed the preload into a user-writable app.asar
 tvmod repair --yes               re-apply the patch after an app update
 tvmod unpatch --yes              restore the original app.asar
 tvmod plugin add <dir> [--force] install or replace a local plugin
+tvmod plugin examples            list bundled example plugins
+tvmod plugin add-example <id>    install a bundled example
 tvmod plugin list                list local plugins
 tvmod plugin remove <id> --yes   remove a plugin
 tvmod plugin refresh             recompose the installed preload
@@ -222,16 +226,24 @@ Notes:
 
 ## Plugins
 
-The gear button opens a modal with individual plugin toggles:
+The gear button opens a larger, categorized plugin modal:
 
-| Plugin | Default | Notes |
-|---|---|---|
-| Adblock | on | Promo offers, upgrade pills, referral/coupon toasts, promo feature flags. Reload required for boot-time filters. |
-| Hide AI Copilot | on | Removes the AI Copilot button/area. |
-| Hide Community Hub | on | Removes the Community Hub button. |
-| Hide Sidebar | off | Hides the right watchlist/details sidebar. |
+| Plugin | Category | Default | Notes |
+|---|---|---|---|
+| Adblock | Ads & promotions | on | Promo offers, upgrade pills, referral/coupon toasts, promo feature flags. Reload required for boot-time filters. |
+| Hide AI Copilot | Interface | on | Removes the AI Copilot button/area. |
+| Hide Community Hub | Interface | on | Removes the Community Hub button. |
+| Hide Sidebar | Interface | off | Collapses the right watchlist/details sidebar. |
+| Hide Right Toolbar | Interface | off | Removes the right button column. |
+| Hide Watchlist | Interface | off | Hides the watchlist while keeping details. |
+| Hide Details Panel | Interface | off | Hides details while keeping the watchlist. |
+| Hide Bottom Controls | Interface | off | Hides the bottom timeframe/date-range bar. |
+| Hide Toolbar Extras | Interface | off | Hides screeners, Pine, calendars, notifications, chats, help, and object tree. |
+| Hide Trade Buttons | Interface | off | Hides buy/sell and broker buttons without touching entitlements. |
+| Focus Mode | Interface | off | Collapses the sidebar and hides the right toolbar and bottom controls. |
+| Reduce Motion | Accessibility | off | Disables UI transitions, animations, and smooth scrolling. |
 
-The modal includes search, a reload banner when a boot-time plugin changes, and **Reset defaults**. The **Registry** tab browses your configured signed registries and exposes Install, Update, and Installed states; installs use the same verified CLI path and reload TradingView through the launcher control endpoint. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
+The modal includes search, category sections, a reload banner when a boot-time plugin changes, and **Reset defaults**. The **Registry** tab browses your configured signed registries and exposes Install, Update, and Installed states; installs use the same verified CLI path and reload TradingView through the launcher control endpoint. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
 
 ### Local plugins
 
@@ -242,6 +254,15 @@ tvmod plugin add examples/plugins/hello-world
 ```
 
 Reload the TradingView page and enable **Hello World** in the gear modal. It demonstrates boolean, string, number, and select settings, in-place `onSettingsChange` updates, permissions, storage, and cleanup.
+
+Bundled examples can be listed and installed directly:
+
+```sh
+tvmod plugin examples
+tvmod plugin add-example clock
+tvmod plugin add-example symbol-notes
+tvmod plugin add-example position-size
+```
 
 SDK v2 also adds `ctx.onCleanup` and a permissioned plugin-to-plugin event bus (`ctx.events`). Existing v1 plugins and boolean settings remain compatible. See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) for the manifest and API.
 
@@ -395,6 +416,8 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Ed25519-signed plugin registry, in-app registry browser, and hot page reload
 - [x] Registry management and bulk updates in the plugin modal
 - [x] Installed-plugin registry provenance for duplicate ids
+- [x] Categorized UI cleanup pack with Focus Mode and Reduce Motion
+- [x] Bundled Clock, Per-Symbol Notes, and Position Size Calculator examples
 - [x] Scheduled web compatibility census with issue reporting
 - [x] Cross-platform builds and best-effort macOS launcher
 - [x] Windows standalone detection/launcher with MSIX detection and a clear unsupported error

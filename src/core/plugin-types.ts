@@ -1,5 +1,32 @@
 export type PluginPermission = 'dom' | 'style' | 'storage' | 'events';
 
+export type PluginCategory =
+  | 'ads'
+  | 'interface'
+  | 'accessibility'
+  | 'tools'
+  | 'other';
+
+export const PLUGIN_CATEGORY_ORDER: PluginCategory[] = [
+  'ads',
+  'interface',
+  'accessibility',
+  'tools',
+  'other',
+];
+
+export const PLUGIN_CATEGORY_LABELS: Record<PluginCategory, string> = {
+  ads: 'Ads & promotions',
+  interface: 'Interface',
+  accessibility: 'Accessibility',
+  tools: 'Tools',
+  other: 'Other',
+};
+
+export function isPluginCategory(value: string): value is PluginCategory {
+  return (PLUGIN_CATEGORY_ORDER as string[]).includes(value);
+}
+
 export type PluginSettingValue = boolean | string | number;
 export type PluginSettings = Record<string, PluginSettingValue>;
 
@@ -55,6 +82,7 @@ export interface ExternalPluginManifest {
   defaultEnabled?: boolean;
   permissions?: PluginPermission[];
   settings?: PluginSettingDefinition[];
+  category?: PluginCategory;
 }
 
 export interface EmbeddedPlugin {
@@ -69,6 +97,7 @@ export interface PanelPlugin {
   defaultEnabled: boolean;
   requiresReload?: boolean;
   external?: boolean;
+  category: PluginCategory;
   version?: string;
   author?: string;
   permissions?: PluginPermission[];

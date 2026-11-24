@@ -203,6 +203,29 @@ export function preloadSourcePath(): string {
   return path.join(path.dirname(path.resolve(entry)), 'preload.cjs');
 }
 
+export function findExamplesDir(entry: string): string | null {
+  const base = path.dirname(path.resolve(entry));
+  const candidates = [
+    path.join(base, 'examples', 'plugins'),
+    path.join(base, '..', 'examples', 'plugins'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(candidate).isDirectory()) {
+        return path.resolve(candidate);
+      }
+    } catch {
+      // Try the next location.
+    }
+  }
+  return null;
+}
+
+export function examplesDir(): string | null {
+  const entry = isStandaloneBinary() ? process.execPath : process.argv[1];
+  return entry ? findExamplesDir(entry) : null;
+}
+
 export function displayPath(filePath: string): string {
   const home = os.homedir();
   const relative = path.relative(home, filePath);

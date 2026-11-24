@@ -1,0 +1,23 @@
+{
+  "id": "symbol-notes",
+  "name": "Per-Symbol Notes",
+  "description": "Adds a floating notes editor that saves a separate note for each symbol.",
+  "version": "1.0.0",
+  "author": "TVMod",
+  "main": "index.js",
+  "defaultEnabled": false,
+  "category": "tools",
+  "permissions": ["dom", "style", "storage"],
+  "settings": [
+    {
+      "key": "position",
+      "name": "Position",
+      "type": "select",
+      "default": "bottom-right",
+      "options": [
+        { "value": "bottom-left", "label": "Bottom left" },
+        { "value": "bottom-right", "label": "Bottom right" }
+      ]
+    }
+  ]
+}
