@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and 
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.14.1, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + functional privacy and workflow plugins + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
+> Status: **v0.15.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + functional privacy and workflow plugins + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
@@ -13,13 +13,13 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Quick Actions** — hotkeys and a floating menu for Notes, Position Size, fullscreen, and reload.
 - **Keyword Filter** — hide watchlist symbols and news/headline content containing configured keywords.
 - **AI Copilot disable** — turns off AI Copilot feature flags at boot and hides remaining UI.
-- **Config button** — a gear button inside the chart opens a Vencord-style plugin modal; `Ctrl+Shift+M` also works.
+- **Native Settings tab** — TVMod lives in the desktop Settings window (`Ctrl+,`) as a **TVMod** tab; `Ctrl+Shift+M` opens it directly.
 - **Functional plugin focus** — native TradingView controls replace the old visual-only sidebar/toolbar hiding plugins.
-- **Categorized plugin screen** — a larger plugin modal groups plugins into Ads & privacy, Interface, Accessibility, Tools, and Other.
+- **Categorized plugin screen** — the native TVMod tab groups plugins into Ads & privacy, Interface, Accessibility, Tools, and Other.
 - **Bundled example plugins** — install Clock, Per-Symbol Notes, and Position Size Calculator with `tvmod plugin add-example`.
 - **Plugin SDK v2** — single-file plugins with typed settings, lifecycle hooks, registered cleanup, and a permissioned plugin event bus.
 - **Signed plugin registry** — Ed25519-signed indexes/bundles, SHA-256 verification, pinned registry keys, and CLI browse/install.
-- **Registry browser** — a Registry tab in the gear modal lists configured registries, filters plugins, installs or updates them, and manages registry keys from the panel.
+- **Registry browser** — a Registry tab in the native TVMod settings lists configured registries, filters plugins, installs or updates them, and manages registry keys.
 - **Bulk updates** — the Registry tab detects available updates and can apply all of them with a single TradingView reload.
 - **Install provenance** — registry installs record their source registry, so duplicate plugin ids resolve to the registry that installed the plugin.
 - **Plugin hot reload** — launcher mode reloads TradingView pages automatically after plugin install/remove/refresh.
@@ -93,12 +93,12 @@ To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 ```sh
 cosign verify-blob \
   --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.1 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.15.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.14.1` verifies every archive signature and the combined checksum.
+The repo helper `tools/verify-release.sh 0.15.0` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -115,7 +115,7 @@ Then:
 
 1. Close any running TradingView instance.
 2. Start TradingView from the TVMod launcher. On Linux that is the `TradingView` desktop entry; on macOS it is `~/Applications/TradingView (TVMod).command`; on Windows it is the `TradingView (TVMod)` Start Menu shortcut.
-3. Click the TVMod gear button at the bottom-right of the chart, or press `Ctrl+Shift+M`.
+3. Open TradingView Settings (`Ctrl+,` or the app menu) and select **TVMod**. `Ctrl+Shift+M` opens it directly.
 
 The first launch attaches an inspector to the Electron main process, prepends the preload to the default session, verifies that it is active, and closes the inspector again.
 
@@ -228,7 +228,7 @@ Notes:
 
 ## Plugins
 
-The gear button opens a larger, categorized plugin modal:
+The **TVMod** tab in the desktop Settings window opens a categorized plugin screen:
 
 | Plugin | Category | Default | Notes |
 |---|---|---|---|
@@ -240,7 +240,11 @@ The gear button opens a larger, categorized plugin modal:
 | Reduce Motion | Accessibility | off | Disables UI transitions, animations, and smooth scrolling. |
 | Quick Actions | Tools | off | `Alt+N` Notes, `Alt+C` Position Size, `Alt+Shift+F` fullscreen, `Alt+Shift+R` reload; optional floating menu. |
 
-The modal includes search, category sections, a reload banner when a boot-time plugin changes, and **Reset defaults**. Old visual-only plugin states are removed automatically. The **Registry** tab browses your configured signed registries and exposes Install, Update, and Installed states; installs use the same verified CLI path and reload TradingView through the launcher control endpoint. Plugin state is stored under `tvmod.config.v2` in the page’s local storage and migrates the old `tvmod.settings.v1` layout automatically.
+The TVMod tab includes search, category sections, a reload banner when a boot-time plugin changes, and **Reset defaults**. Old visual-only plugin states are removed automatically. The **Registry** tab browses your configured signed registries and exposes Install, Update, and Installed states; installs use the same verified CLI path and reload TradingView through the launcher control endpoint.
+
+Plugin state is stored in `~/.config/tvmod/config.json` (macOS: `~/Library/Application Support/tvmod/config.json`; Windows: `%APPDATA%\tvmod\config.json`) and mirrored to `tvmod.config.v2` in the TradingView page's local storage for downgrade compatibility. The old `tvmod.settings.v1` layout migrates automatically on the first chart page load.
+
+Launcher mode uses the native **TVMod** tab. Patch mode has no main-process config bridge, so it keeps the in-chart gear panel and page-local settings.
 
 ### Local plugins
 
@@ -250,7 +254,7 @@ External plugins live in `~/.local/share/tvmod/plugins/<id>/` with a `manifest.j
 tvmod plugin add examples/plugins/hello-world
 ```
 
-Reload the TradingView page and enable **Hello World** in the gear modal. It demonstrates boolean, string, number, and select settings, in-place `onSettingsChange` updates, permissions, storage, and cleanup.
+Reload the TradingView page and enable **Hello World** in **Settings → TVMod**. It demonstrates boolean, string, number, and select settings, in-place `onSettingsChange` updates, permissions, storage, and cleanup.
 
 Bundled examples can be listed and installed directly:
 
@@ -296,7 +300,7 @@ tvmod plugin browse
 tvmod plugin install hello-world
 ```
 
-The gear modal’s **Registry** tab uses the same registry configuration. Open **Manage registries** to add a registry with its HTTPS index URL and public key (paste it or choose a `.pem` file), or remove one. Search for a plugin and click **Install**; an older installed version shows **Update**, and a current version shows **Installed**. When updates exist, **Update all** installs them sequentially and reloads TradingView once. If multiple registries offer the same plugin id, bulk update uses the source registry recorded when the plugin was installed. It only skips the id when that source is unavailable or still ambiguous. The modal does not add a default registry or bypass key pinning.
+The TVMod settings tab's **Registry** view uses the same registry configuration. Open **Manage registries** to add a registry with its HTTPS index URL and public key (paste it or choose a `.pem` file), or remove one. Search for a plugin and click **Install**; an older installed version shows **Update**, and a current version shows **Installed**. When updates exist, **Update all** installs them sequentially and reloads TradingView once. If multiple registries offer the same plugin id, bulk update uses the source registry recorded when the plugin was installed. It only skips the id when that source is unavailable or still ambiguous. TVMod does not add a default registry or bypass key pinning.
 
 See [docs/PLUGIN_REGISTRY.md](docs/PLUGIN_REGISTRY.md) for the formats, key rotation, hosting, and security model. There is no default registry.
 
@@ -353,7 +357,7 @@ preload.js
   ├─ webFrame.executeJavaScript: early boot traps for initData/user/flags
   ├─ webFrame.insertCSS: page-level CSS cleanup
   ├─ DOM observer: tag and hide promo/declutter nodes
-  └─ shadow-DOM panel: settings and toggle controls
+  └─ native Settings tab: shared config + plugin controls
 ```
 
 The preload runs in Electron’s renderer preload context. Built-in cleanup never receives Node.js access. External plugins receive only the capability context described in [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md); the privileged code is the small launcher/bootstrap and preload host.
@@ -391,7 +395,7 @@ src/cli.ts             command dispatcher
 src/commands/          install, launch, doctor, uninstall, patch/repair/unpatch
 src/lib/               app detection, inspector client, desktop integration, state, ASAR patching
 src/preload.ts         Electron preload entry
-src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, plugin host, panel
+src/core/              boot filters, CSS, DOM cleanup, plugin registry/config, plugin host, settings view, native Settings tab
 src/lib/plugin-files.ts plugin validation, embedding, and CLI plugin install
 src/lib/plugin-signing.ts Ed25519 bundles/indexes
 src/lib/registry.ts     registry config, fetch, and verification
@@ -415,7 +419,7 @@ docs/                  architecture, plugin SDK, and patch design
 
 - [x] Linux launcher / injector backend
 - [x] Early boot filters and DOM cleanup
-- [x] Mod panel and persisted settings
+- [x] Native Settings tab and persisted settings
 - [x] Vencord-style plugin list with individual toggles and search
 - [x] Local plugin SDK v1 with manifest, permissions, settings, and lifecycle
 - [x] Plugin SDK v2 with typed settings, lifecycle hooks, cleanup registration, and events
@@ -428,10 +432,11 @@ docs/                  architecture, plugin SDK, and patch design
 - [ ] Snap validation on a confined snapd host (inspect binding and preload readability)
 - [x] Sigstore keyless release signing and GitHub provenance
 - [x] Ed25519-signed plugin registry, in-app registry browser, and hot page reload
-- [x] Registry management and bulk updates in the plugin modal
+- [x] Registry management and bulk updates in the native settings tab
 - [x] Installed-plugin registry provenance for duplicate ids
 - [x] Functional Privacy Shield, Quick Actions, and Keyword Filter
 - [x] Adblock coverage for charting-ad toasts and ad-detection flags
+- [x] Desktop Upgrade Now overlay blocking
 - [x] Bundled Clock, Per-Symbol Notes, and Position Size Calculator examples
 - [x] Scheduled web compatibility census with issue reporting
 - [x] Cross-platform builds and best-effort macOS launcher

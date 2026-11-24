@@ -335,6 +335,77 @@ const PANEL_STYLE = `
   .hint { color: #77808b; font-size: 10px; }
 `;
 
+const EMBEDDED_STYLE = `
+  :host([data-embedded="1"]) {
+    display: block; width: 100%; height: 100%;
+    min-width: 0; min-height: 0;
+    pointer-events: auto;
+    font: 12px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :host([data-embedded="1"]) .modal {
+    position: static; inset: auto; top: auto; left: auto;
+    transform: none; z-index: auto;
+    width: 100%; height: 100%; max-height: none; min-height: 0;
+    border: 0; border-radius: 0; box-shadow: none;
+    background: var(--color-container-fill-tertiary-inverse, #14171b);
+    color: var(--color-content-primary-neutral-bold, #e9ecef);
+  }
+  :host([data-embedded="1"]) .header { padding: 10px 12px 7px; }
+  :host([data-embedded="1"]) .title { font-size: 14px; }
+  :host([data-embedded="1"]) .subtitle { font-size: 10px; }
+  :host([data-embedded="1"]) .toolbar { padding: 0 12px 8px; }
+  :host([data-embedded="1"]) .tabs { padding: 0 12px 8px; }
+  :host([data-embedded="1"]) .plugins { padding: 0 8px 8px; }
+  :host([data-embedded="1"]) .registry { padding: 0 8px 8px; }
+  :host([data-embedded="1"]) .footer { padding: 8px 12px 10px; }
+  :host([data-embedded="1"]) .plugin { padding: 9px 7px; }
+  :host([data-embedded="1"]) .plugin-desc { font-size: 10.5px; }
+  :host([data-embedded="1"]) .registry-item {
+    flex-direction: column; align-items: stretch; gap: 8px;
+  }
+  :host([data-embedded="1"]) .registry-item .install { align-self: flex-end; }
+  :host([data-embedded="1"]) .registry-form-row { flex-wrap: wrap; }
+
+  :host([data-theme="light"]) .modal {
+    background: var(--color-container-fill-tertiary-inverse, #ffffff);
+    color: var(--color-content-primary-neutral-bold, #131722);
+  }
+  :host([data-theme="light"]) .subtitle,
+  :host([data-theme="light"]) .count,
+  :host([data-theme="light"]) .hint,
+  :host([data-theme="light"]) .plugin-desc,
+  :host([data-theme="light"]) .plugin-meta,
+  :host([data-theme="light"]) .category-title,
+  :host([data-theme="light"]) .registry-status {
+    color: #5d606b;
+  }
+  :host([data-theme="light"]) .plugin[data-enabled="true"],
+  :host([data-theme="light"]) .registry-item {
+    border-color: #e0e3eb;
+    background: #f7f8fa;
+  }
+  :host([data-theme="light"]) .category-head { border-color: #e0e3eb; }
+  :host([data-theme="light"]) .category-count { border-color: #d1d4dc; }
+  :host([data-theme="light"]) .search,
+  :host([data-theme="light"]) .setting-input,
+  :host([data-theme="light"]) .setting-select,
+  :host([data-theme="light"]) .registry-input,
+  :host([data-theme="light"]) .registry-textarea {
+    border-color: #d1d4dc; background: #fff; color: #131722;
+  }
+  :host([data-theme="light"]) .reset,
+  :host([data-theme="light"]) .registry-refresh,
+  :host([data-theme="light"]) .registry-action,
+  :host([data-theme="light"]) .install,
+  :host([data-theme="light"]) .tab[data-active="true"] {
+    border-color: #d1d4dc; background: #f0f3fa; color: #131722;
+  }
+  :host([data-theme="light"]) .tab { color: #5d606b; }
+  :host([data-theme="light"]) .tab[data-active="true"] { color: #131722; }
+  :host([data-theme="light"]) .plugin-settings { border-color: #e0e3eb; }
+  :host([data-theme="light"]) .switch input:not(:checked) + .slider { background: #b7bdc9; }
+`;
+
 export interface PanelOptions {
   version: string;
   plugins: PanelPlugin[];
@@ -343,11 +414,15 @@ export interface PanelOptions {
   defaultConfig: () => TvmodConfig;
   getPluginError?: (id: string) => string | null;
   registry?: RegistryClient;
+  embedded?: boolean;
+  container?: HTMLElement | null;
+  reloadPages?: () => Promise<unknown> | void;
 }
 
 export interface PanelHandle {
   ensureMounted: () => void;
   refresh: () => void;
+  focus: () => void;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -356,7 +431,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
 }
 
-function gearSvg(): string {
+export function gearSvg(): string {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.12.55-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.34.61.22l2.39-.96c.5.39 1.05.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.55 1.63-.94l2.39.96c.19.12.47.02.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>`;
 }
 
@@ -365,7 +440,11 @@ interface SettingBinding {
 }
 
 export function mountPanel(options: PanelOptions): PanelHandle | null {
-  if (document.getElementById(PANEL_ID)) return null;
+  const embedded = options.embedded === true;
+  const container = embedded ? options.container ?? null : document.documentElement;
+  if (!container) return null;
+  if (embedded && container.querySelector(`#${PANEL_ID}`)) return null;
+  if (!embedded && document.getElementById(PANEL_ID)) return null;
 
   const root = document.documentElement;
   if (!root) return null;
@@ -380,25 +459,56 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
   const host = document.createElement('div');
   host.id = PANEL_ID;
-  host.style.position = 'fixed';
-  host.style.inset = '0';
-  host.style.zIndex = '2147483647';
-  host.style.pointerEvents = 'none';
+  host.dataset.embedded = embedded ? '1' : '0';
+  host.dataset.theme =
+    root.getAttribute('data-theme') === 'light' ||
+    root.classList.contains('theme-light')
+      ? 'light'
+      : 'dark';
+  if (embedded) {
+    host.style.position = 'relative';
+    host.style.inset = 'auto';
+    host.style.zIndex = 'auto';
+    host.style.pointerEvents = 'auto';
+    host.style.display = 'block';
+    host.style.width = '100%';
+    host.style.height = '100%';
+    host.style.minWidth = '0';
+    host.style.minHeight = '0';
+  } else {
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    host.style.zIndex = '2147483647';
+    host.style.pointerEvents = 'none';
+  }
+
+  const fabMarkup = embedded
+    ? ''
+    : `<button class="fab" type="button" aria-label="Open TVMod plugins" title="TVMod plugins (Ctrl+Shift+M)">
+      ${gearSvg()}<span class="dot" hidden></span>
+    </button>`;
+  const backdropMarkup = embedded
+    ? ''
+    : '<div class="backdrop" hidden></div>';
+  const closeMarkup = embedded
+    ? ''
+    : '<button class="close" type="button" aria-label="Close">×</button>';
+  const hiddenMarkup = embedded ? '' : ' hidden';
+  const modalRole = embedded ? 'region' : 'dialog';
+  const modalAria = embedded ? '' : ' aria-modal="true"';
 
   const shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = `
-    <style>${PANEL_STYLE}</style>
-    <button class="fab" type="button" aria-label="Open TVMod plugins" title="TVMod plugins (Ctrl+Shift+M)">
-      ${gearSvg()}<span class="dot" hidden></span>
-    </button>
-    <div class="backdrop" hidden></div>
-    <div class="modal" role="dialog" aria-modal="true" aria-label="TVMod plugins" hidden>
+    <style>${PANEL_STYLE}${embedded ? EMBEDDED_STYLE : ''}</style>
+    ${fabMarkup}
+    ${backdropMarkup}
+    <div class="modal" role="${modalRole}"${modalAria} aria-label="TVMod plugins"${hiddenMarkup}>
       <div class="header">
         <div>
           <h2 class="title">TVMod <span class="version"></span></h2>
-          <div class="subtitle">Plugins and cleanup</div>
+          <div class="subtitle">Plugins and cleanup${embedded ? ' · Changes save immediately' : ''}</div>
         </div>
-        <button class="close" type="button" aria-label="Close">×</button>
+        ${closeMarkup}
       </div>
       <div class="toolbar">
         <input class="search" type="search" placeholder="Search plugins" aria-label="Search plugins">
@@ -414,7 +524,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
           <span class="registry-status"></span>
           <span class="registry-tools">
             <button class="registry-action primary registry-update-all" type="button" hidden>Update all</button>
-            <button class="registry-action registry-reload" type="button" hidden>Reload page</button>
+            <button class="registry-action registry-reload" type="button" hidden>Reload pages</button>
             <button class="registry-refresh" type="button">Refresh</button>
           </span>
         </div>
@@ -443,7 +553,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       <div class="reload" hidden></div>
       <div class="footer">
         <button class="reset" type="button">Reset defaults</button>
-        <span class="hint">Stored locally</span>
+        <span class="hint">${embedded ? 'Saved immediately' : 'Stored locally'}</span>
       </div>
     </div>
   `;
@@ -1476,11 +1586,24 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     if (dot) dot.hidden = !dirty;
     if (reload) {
       reload.hidden = !dirty;
-      reload.textContent = 'Adblock changed. Reload the page to apply boot-time filters.';
+      reload.textContent = options.embedded
+        ? 'Reload chart pages to apply boot-time filters.'
+        : 'Adblock changed. Reload the page to apply boot-time filters.';
       const reloadButton = document.createElement('button');
       reloadButton.type = 'button';
-      reloadButton.textContent = 'Reload page';
-      reloadButton.addEventListener('click', () => location.reload());
+      reloadButton.textContent = options.embedded ? 'Reload pages' : 'Reload page';
+      reloadButton.addEventListener('click', () => {
+        if (options.reloadPages) {
+          reloadButton.disabled = true;
+          Promise.resolve(options.reloadPages())
+            .catch((error) => console.error('[tvmod] reload failed', error))
+            .finally(() => {
+              reloadButton.disabled = false;
+            });
+          return;
+        }
+        location.reload();
+      });
       reload.append(reloadButton);
     }
 
@@ -1488,7 +1611,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
   };
 
   const setOpen = (open: boolean): void => {
-    if (!modal || !backdrop) return;
+    if (embedded || !modal || !backdrop) return;
     modal.hidden = !open;
     backdrop.hidden = !open;
     if (open) {
@@ -1502,14 +1625,16 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     }
   };
 
-  fab?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setOpen(true);
-  });
+  if (!embedded) {
+    fab?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(true);
+    });
 
-  closeButton?.addEventListener('click', () => setOpen(false));
-  backdrop?.addEventListener('click', () => setOpen(false));
+    closeButton?.addEventListener('click', () => setOpen(false));
+    backdrop?.addEventListener('click', () => setOpen(false));
+  }
   search?.addEventListener('input', applyFilter);
 
   reset?.addEventListener('click', () => {
@@ -1518,33 +1643,35 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     sync();
   });
 
-  window.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key === 'Escape' && modal && !modal.hidden) {
-        setOpen(false);
-        return;
-      }
+  if (!embedded) {
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key === 'Escape' && modal && !modal.hidden) {
+          setOpen(false);
+          return;
+        }
 
-      if (
-        event.ctrlKey &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        event.code === 'KeyM'
-      ) {
-        if (isEditableTarget(event.target)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (modal) setOpen(modal.hidden !== false);
-      }
-    },
-    true
-  );
+        if (
+          event.ctrlKey &&
+          event.shiftKey &&
+          !event.altKey &&
+          !event.metaKey &&
+          event.code === 'KeyM'
+        ) {
+          if (isEditableTarget(event.target)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (modal) setOpen(modal.hidden !== false);
+        }
+      },
+      true
+    );
+  }
 
   const ensureMounted = (): void => {
     if (!host.isConnected) {
-      document.documentElement.appendChild(host);
+      container.appendChild(host);
     }
   };
 
@@ -1553,8 +1680,12 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
     sync();
   };
 
+  const focus = (): void => {
+    search?.focus();
+  };
+
   ensureMounted();
   sync();
 
-  return { ensureMounted, refresh };
+  return { ensureMounted, refresh, focus };
 }

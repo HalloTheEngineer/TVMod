@@ -10,7 +10,7 @@ SDK v2 adds typed settings, plugin-to-plugin events, `onSettingsChange`, and `ct
 tvmod plugin add examples/plugins/hello-world
 ```
 
-Reload the TradingView page, open the TVMod gear modal, and enable **Hello World**. The example badge and its settings appear.
+Reload the TradingView page, open **Settings → TVMod**, and enable **Hello World**. The example badge and its settings appear.
 
 For a patched install, run:
 
@@ -86,7 +86,7 @@ Rules:
 - `id` is lowercase `[a-z0-9._-]`, unique, and cannot collide with a built-in plugin.
 - `main` is a single `.js` filename inside the plugin directory. Plugins are single-file; local asset loading is not exposed.
 - `defaultEnabled` defaults to `false` for external plugins.
-- `category` is `ads`, `interface`, `accessibility`, `tools`, or `other`; it controls the modal section. Defaults to `other`.
+- `category` is `ads`, `interface`, `accessibility`, `tools`, or `other`; it controls the settings section. Defaults to `other`.
 - `permissions` may contain `dom`, `style`, `storage`, and `events`.
 - Manifest size is limited to 64 KiB; source is limited to 512 KiB.
 - Up to 32 settings are allowed.
@@ -117,7 +117,7 @@ Validation rules:
 - Select options must be unique; the default must match one option.
 - Invalid or out-of-range stored values fall back to defaults or are clamped.
 
-Saved values live in the existing `tvmod.config.v2` page local storage. v1 boolean values remain valid.
+Saved values live in the shared `config.json` (`~/.config/tvmod/config.json` on Linux) and are mirrored to `tvmod.config.v2` page local storage. v1 boolean values remain valid.
 
 ## Module format
 
@@ -157,7 +157,7 @@ Cleanup ordering:
 - `ctx.onCleanup` callbacks run in reverse registration order.
 - Event subscriptions and auto-registered style/DOM observers are removed automatically.
 
-A broken plugin or lifecycle hook is caught and marked as `error` in the modal; it cannot crash the panel or other plugins. A failing `onSettingsChange` stops the plugin.
+A broken plugin or lifecycle hook is caught and marked as `error` in the TVMod settings tab; it cannot crash the settings view or other plugins. A failing `onSettingsChange` stops the plugin.
 
 ## Context
 
@@ -266,7 +266,7 @@ tvmod plugin add-example position-size
 - No string multiline/textarea control, colors, or multi-select settings.
 - No hot module replacement; `plugin add/remove/refresh` recomposes the preload and requires a page reload.
 - Plugin changes require `tvmod repair --yes` for patched installs.
-- No plugin commands or panel action buttons.
+- No plugin commands or settings action buttons.
 - No inter-plugin dependency management.
 - No `page`/TradingView-globals permission.
 - No remote registry code executes automatically; registry installs are explicit.

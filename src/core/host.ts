@@ -69,9 +69,31 @@ export interface RegistryClient {
   reload(): Promise<RegistryReloadResult>;
 }
 
+export interface ConfigLoadResult {
+  exists: boolean;
+  config?: unknown;
+  error?: string;
+}
+
+export interface ConfigBridge {
+  load(): ConfigLoadResult;
+  save(config: unknown): void;
+  migrate(config: unknown): void;
+  onChange(handler: (config: unknown) => void): void;
+  request?(): void;
+  onRequest?(handler: () => void): void;
+}
+
+export interface SettingsFocusBridge {
+  consume(): boolean;
+  onChange(handler: () => void): void;
+}
+
 export interface Host {
   executeJavaScript(code: string): Promise<unknown>;
   insertCSS(css: string): string;
   removeInsertedCSS(key: string): void;
   registry?: RegistryClient;
+  config?: ConfigBridge;
+  settingsFocus?: SettingsFocusBridge;
 }

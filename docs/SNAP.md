@@ -37,7 +37,7 @@ tvmod launch --user-data-dir /tmp/tvmod-snap-probe --verbose
 Expected:
 
 - `tvmod doctor` reports the Snap flavor and the Snap preload path.
-- `tvmod launch` reports an inspector URL, a spawned PID, `preload active`, and the gear modal appears in the chart.
+- `tvmod launch` reports an inspector URL, a spawned PID, `preload active`, and **Settings → TVMod** appears in the desktop Settings window.
 - `~/.local/state/tvmod/logs/launch.log` contains `Debugger listening on ws://...`.
 
 ## Failure modes to report
@@ -48,8 +48,8 @@ Expected:
 2. **`preload confirmed` never appears**
    - The app may not be allowed to read `~/snap/tradingview/common/tvmod/preload.js`, or the Snap in-use revision has a different layout.
 
-3. **Preload confirmed but no gear modal**
-   - `target-tvd-host-preload.js` may not be loading in the chart frame, or the supported-page scope rejected the URL.
+3. **Preload confirmed but no TVMod settings tab**
+   - `target-tvd-host-preload.js` may not be loading in the chart or dialog frame, or the supported-page scope rejected the URL.
 
 4. **A second instance exits immediately**
    - Snap/TradingView single-instance locking may cross profiles; close the normal app before probing.

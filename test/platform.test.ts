@@ -13,6 +13,7 @@ import { computePaths, findExamplesDir } from '../src/lib/paths.js';
 test('platform paths follow native config locations', () => {
   const linux = computePaths('linux', '/home/u', {});
   assert.equal(linux.configDir, '/home/u/.config/tvmod');
+  assert.equal(linux.configFile, '/home/u/.config/tvmod/config.json');
   assert.equal(linux.wrapperPath, '/home/u/.local/bin/tvmod');
   assert.equal(linux.desktopFile, '/home/u/.local/share/applications/tradingview.desktop');
 

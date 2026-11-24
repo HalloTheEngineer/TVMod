@@ -9,6 +9,7 @@ export interface PlatformPaths {
   logsDir: string;
   launchLog: string;
   stateFile: string;
+  configFile: string;
   controlFile: string;
   registriesFile: string;
   registryInstallsFile: string;
@@ -121,6 +122,7 @@ export function computePaths(
   }
 
   const stateFile = path.join(configDir, 'state.json');
+  const configFile = path.join(configDir, 'config.json');
   const preloadTarget = path.join(dataDir, 'preload.js');
   const wrapperPath = path.join(localBinDir, wrapperName);
   const desktopFile = path.join(desktopDir, desktopName);
@@ -132,6 +134,7 @@ export function computePaths(
     logsDir,
     launchLog: path.join(logsDir, 'launch.log'),
     stateFile,
+    configFile,
     controlFile: path.join(stateDir, 'control.json'),
     registriesFile: path.join(configDir, 'registries.json'),
     registryInstallsFile: path.join(dataDir, 'registry-installs.json'),
@@ -164,6 +167,7 @@ export const stateDir = paths.stateDir;
 export const logsDir = paths.logsDir;
 export const launchLog = paths.launchLog;
 export const stateFile = paths.stateFile;
+export const configFile = paths.configFile;
 export const controlFile = paths.controlFile;
 export const registriesFile = paths.registriesFile;
 export const registryInstallsFile = paths.registryInstallsFile;

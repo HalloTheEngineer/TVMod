@@ -17,6 +17,7 @@ import {
 } from '../lib/app-detect.js';
 import { UserError } from '../lib/errors.js';
 import {
+  configFile,
   controlFile,
   isStandaloneBinary,
   launchLog,
@@ -388,10 +389,15 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
       preloads?: string[];
     }>(
       client,
-      buildBootstrapScript(state.preloadPath, controlFile, [
-        process.execPath,
-        ...(isStandaloneBinary() ? [] : [process.argv[1] ?? '']),
-      ]),
+      buildBootstrapScript(
+        state.preloadPath,
+        controlFile,
+        [
+          process.execPath,
+          ...(isStandaloneBinary() ? [] : [process.argv[1] ?? '']),
+        ],
+        configFile
+      ),
       'bootstrap'
     );
     debug(`bootstrap: ${JSON.stringify(bootstrap)}`);
@@ -425,7 +431,7 @@ export async function launchCommand(options: LaunchOptions): Promise<void> {
       info(`pid=${child.pid}`);
     }
 
-    ok('TradingView is running with TVMod. Press Ctrl+Shift+M for the panel.');
+    ok('TradingView is running with TVMod. Open Settings (Ctrl+,) for TVMod.');
   } catch (error) {
     const logText = readIfExists(launchLog);
     const secondInstance = logText.includes('(second-instance)');

@@ -1,7 +1,8 @@
 export function buildBootstrapScript(
   preloadPath: string,
   controlFile: string,
-  cliCommand: string[]
+  cliCommand: string[],
+  configFile = ''
 ): string {
   return `(() => {
   const { app, session, webContents, ipcMain, dialog, BrowserWindow } = require('electron');
@@ -12,13 +13,16 @@ export function buildBootstrapScript(
   const { execFile, spawn } = require('node:child_process');
   const PRELOAD = ${JSON.stringify(preloadPath)};
   const CONTROL_FILE = ${JSON.stringify(controlFile)};
+  const CONFIG_FILE = ${JSON.stringify(configFile)};
   const CLI = ${JSON.stringify(cliCommand)};
+  const CONFIG_MAX_BYTES = 512 * 1024;
   const MARK = '__tvmodPatched';
   const REGISTRY_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
   const PLUGIN_ID = /^[a-z0-9][a-z0-9._-]{1,63}$/;
   const MAX_PUBLIC_KEY_BYTES = 16 * 1024;
   let controlServer = null;
   let controlToken = null;
+  let focusSettingsOnce = false;
 
   const reloadTradingViewPages = () => {
     const pages = webContents.getAllWebContents().filter((wc) =>
@@ -34,6 +38,162 @@ export function buildBootstrapScript(
     }
     return ids;
   };
+
+  const isTradingViewPage = (wc) =>
+    !wc.isDestroyed() &&
+    String(wc.getURL()).startsWith('https://www.tradingview.com');
+
+  const readConfigFile = () => {
+    if (!CONFIG_FILE) return { exists: false };
+    try {
+      const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
+      if (Buffer.byteLength(raw, 'utf8') > CONFIG_MAX_BYTES) {
+        return { exists: true, error: 'config file is too large' };
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { exists: true, error: 'config file is invalid' };
+      }
+      return { exists: true, config: parsed };
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return { exists: false };
+      return {
+        exists: true,
+        error: String(error && error.message ? error.message : error)
+      };
+    }
+  };
+
+  const writeConfigFile = (config, onlyIfMissing = false) => {
+    if (!CONFIG_FILE) {
+      return { ok: false, error: 'config path is unavailable' };
+    }
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      return { ok: false, error: 'config must be an object' };
+    }
+    let raw;
+    try {
+      raw = JSON.stringify(config);
+    } catch (error) {
+      return { ok: false, error: 'config is not serializable' };
+    }
+    if (Buffer.byteLength(raw, 'utf8') > CONFIG_MAX_BYTES) {
+      return { ok: false, error: 'config is larger than 512 KiB' };
+    }
+    try {
+      if (onlyIfMissing && fs.existsSync(CONFIG_FILE)) {
+        return { ok: true, skipped: true };
+      }
+      fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+      const temp = CONFIG_FILE + '.tmp';
+      fs.writeFileSync(temp, raw, { mode: 0o600 });
+      try {
+        fs.renameSync(temp, CONFIG_FILE);
+      } catch {
+        fs.rmSync(CONFIG_FILE, { force: true });
+        fs.renameSync(temp, CONFIG_FILE);
+      }
+      try { fs.chmodSync(CONFIG_FILE, 0o600); } catch {}
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: String(error && error.message ? error.message : error)
+      };
+    }
+  };
+
+  const broadcastConfig = (config) => {
+    for (const wc of webContents.getAllWebContents()) {
+      if (wc.isDestroyed()) continue;
+      try { wc.send('tvmod:config:changed', config); } catch {}
+    }
+  };
+
+  const requestConfigFromPages = () => {
+    for (const wc of webContents.getAllWebContents()) {
+      if (!isTradingViewPage(wc)) continue;
+      try { wc.send('tvmod:config:request'); } catch {}
+    }
+  };
+
+  const registerConfigIpc = () => {
+    if (globalThis.__TVMOD_CONFIG_IPC__) return;
+    globalThis.__TVMOD_CONFIG_IPC__ = true;
+
+    ipcMain.on('tvmod:config:probe', (event) => {
+      event.returnValue = true;
+    });
+
+    ipcMain.on('tvmod:config:load', (event) => {
+      event.returnValue = readConfigFile();
+    });
+
+    ipcMain.on('tvmod:config:save', (_event, config) => {
+      const result = writeConfigFile(config);
+      if (!result.ok) {
+        console.error('[tvmod] config save failed:', result.error);
+        return;
+      }
+      broadcastConfig(config);
+    });
+
+    ipcMain.on('tvmod:config:migrate', (_event, config) => {
+      const result = writeConfigFile(config, true);
+      if (!result.ok) {
+        console.error('[tvmod] config migration failed:', result.error);
+        return;
+      }
+      if (!result.skipped) broadcastConfig(config);
+    });
+
+    ipcMain.on('tvmod:config:request', () => {
+      requestConfigFromPages();
+    });
+
+    ipcMain.on('tvmod:settings-focus', (event) => {
+      event.returnValue = focusSettingsOnce;
+      focusSettingsOnce = false;
+    });
+
+    ipcMain.on('tvmod:open-settings', (event) => {
+      focusSettingsOnce = true;
+      const sender = event.sender;
+      const target =
+        sender && sender.hostWebContents ? sender.hostWebContents : sender;
+      try {
+        target.focus();
+        const modifiers =
+          process.platform === 'darwin' ? ['meta'] : ['control'];
+        target.sendInputEvent({
+          type: 'keyDown',
+          keyCode: ',',
+          modifiers
+        });
+        target.sendInputEvent({
+          type: 'keyUp',
+          keyCode: ',',
+          modifiers
+        });
+      } catch (error) {
+        console.error('[tvmod] could not open native settings:', error);
+      }
+      setTimeout(() => {
+        for (const wc of webContents.getAllWebContents()) {
+          if (wc.isDestroyed()) continue;
+          if (!String(wc.getURL()).includes('/app/dialog-window/index.html')) {
+            continue;
+          }
+          try { wc.send('tvmod:focus-settings-tab'); } catch {}
+        }
+      }, 400);
+      setTimeout(() => {
+        focusSettingsOnce = false;
+      }, 2000);
+    });
+  };
+
+  registerConfigIpc();
 
   const cliError = (result) => {
     const stderr = String(result.stderr || '').trim();

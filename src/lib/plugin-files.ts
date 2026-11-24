@@ -352,7 +352,7 @@ export function composePreload(
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
 
-  return `globalThis.__TVMOD_EXTERNAL_PLUGINS__ = ${serialized};\n${baseSource}`;
+  return 'globalThis.__TVMOD_EXTERNAL_PLUGINS__ = ' + serialized + ';\n' + baseSource;
 }
 
 export function writeInstalledPreload(

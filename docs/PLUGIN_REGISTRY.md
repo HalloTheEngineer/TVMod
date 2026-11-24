@@ -1,6 +1,6 @@
 # Plugin registry
 
-TVMod v0.14.1 adds signed plugin bundles, signed registry indexes, CLI and in-app registry management/installs, bulk updates, install provenance, and automatic page reload after plugin changes in launcher mode.
+TVMod v0.15.0 adds signed plugin bundles, signed registry indexes, CLI and in-app registry management/installs, bulk updates, install provenance, and automatic page reload after plugin changes in launcher mode.
 
 There is no default registry and no remote code is loaded automatically. You add a registry by pinning its public key.
 
@@ -111,9 +111,9 @@ tvmod plugin install hello-world
 
 In launcher mode, the page reloads automatically through the token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after installing plugins; the patch contains a snapshot of the preload.
 
-## Use the plugin modal
+## Use the settings tab
 
-The gear modal has a **Registry** tab in launcher mode. It reads the same configured registries and pinned keys as the CLI.
+Open **Settings → TVMod** (`Ctrl+,`, or `Ctrl+Shift+M`) and switch to **Registry** in launcher mode. It reads the same configured registries and pinned keys as the CLI.
 
 ### Manage registries
 
@@ -122,7 +122,7 @@ Open **Manage registries**:
 - **Add** — enter a name, the HTTPS index URL, and the public key. Paste the PEM contents or choose a `.pem` file. The index signature is verified before the registry is saved.
 - **Remove** — click **Remove**, then **Confirm remove**. Installed plugins are kept.
 
-The add form accepts only public keys. Private keys are rejected by both the panel and the CLI, and keys are passed to the CLI over stdin rather than written to disk or placed in process arguments.
+The add form accepts only public keys. Private keys are rejected by both the settings view and the CLI, and keys are passed to the CLI over stdin rather than written to disk or placed in process arguments.
 
 ### Install and update
 
@@ -140,13 +140,13 @@ When an installed external plugin has a different version in a configured regist
 1. installs each update without reloading the page;
 2. reloads TradingView once if all updates succeed;
 3. keeps the page open and lists failures if any update fails;
-4. offers **Reload page** to apply successful updates after a partial failure.
+4. offers **Reload pages** to apply successful updates after a partial failure.
 
 If the same plugin id is offered by multiple registries, bulk update prefers the registry recorded when the plugin was installed. It skips the id only if that source registry is no longer configured or does not offer the plugin.
 
 The tab calls the CLI through a main-process IPC bridge. Plugin ids and registry names are validated before `execFile`/`spawn` runs, no shell is involved, and public keys are capped at 16 KiB. A failed install shows the CLI error in the tab (for example, a checksum or signature failure).
 
-Patch mode has no main-process bootstrap, so the Registry tab cannot install or manage registries there. Use the CLI and then `tvmod repair --yes`.
+Patch mode has no main-process bootstrap, so the Registry view cannot install or manage registries there. Use the CLI and then `tvmod repair --yes`.
 
 Remove a registry:
 

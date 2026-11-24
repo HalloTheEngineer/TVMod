@@ -4,17 +4,17 @@ import {
   defaultConfig,
   isPluginEnabled,
   loadConfig,
+  normalizeConfig,
   saveConfig,
   type TvmodConfig,
 } from './config.js';
 import { PAGE_CSS } from './css.js';
 import { applyDom, startDomObserver } from './dom.js';
-import { readEmbeddedPlugins, toPanelPlugin } from './embedded-plugins.js';
 import { applyKeywordFilter } from './keyword-filter.js';
 import type { Host } from './host.js';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { PluginHost } from './plugin-host.js';
-import { PLUGINS } from './plugins.js';
+import { loadPluginSet } from './plugin-set.js';
 import { applyQuickActions } from './quick-actions.js';
 import { PRIVACY_HOSTS } from '../lib/privacy.js';
 
@@ -24,24 +24,19 @@ export function start(version: string, host: Host): void {
   if (started) return;
   started = true;
 
-  const embeddedPlugins = readEmbeddedPlugins();
-  const externalPlugins = embeddedPlugins.map((plugin) =>
-    toPanelPlugin(plugin.manifest)
-  );
-  const plugins = [
-    ...PLUGINS,
-    ...externalPlugins.filter(
-      (external) => !PLUGINS.some((builtin) => builtin.id === external.id)
-    ),
-  ];
+  const { embedded, plugins } = loadPluginSet();
+  const bridge = host.config;
+  const remote = bridge?.load();
 
-  let config: TvmodConfig = loadConfig(undefined, plugins);
-  const pluginHost = new PluginHost(
-    embeddedPlugins,
-    () => config,
-    host,
-    version
-  );
+  let config: TvmodConfig;
+  if (remote?.exists && !remote.error && remote.config) {
+    config = normalizeConfig(remote.config, plugins);
+  } else {
+    config = loadConfig(undefined, plugins);
+    if (bridge && !remote?.error) bridge.migrate(config);
+  }
+
+  const pluginHost = new PluginHost(embedded, () => config, host, version);
 
   try {
     host.insertCSS(PAGE_CSS);
@@ -62,7 +57,6 @@ export function start(version: string, host: Host): void {
   });
 
   let panel: PanelHandle | null = null;
-  const registry = host.registry;
 
   const syncPlugins = (): void => {
     void pluginHost.sync().then(() => panel?.refresh());
@@ -74,27 +68,47 @@ export function start(version: string, host: Host): void {
     applyQuickActions(config);
   };
 
+  let ready = false;
+
+  if (bridge) {
+    bridge.onChange((raw) => {
+      const next = normalizeConfig(raw, plugins);
+      if (JSON.stringify(next) === JSON.stringify(config)) return;
+      config = next;
+      saveConfig(config);
+      if (!ready) return;
+      applyFeatures();
+      syncPlugins();
+    });
+    bridge.onRequest?.(() => bridge.save(config));
+  }
+
   const onReady = (): void => {
+    ready = true;
     applyFeatures();
 
-    try {
-      panel = mountPanel({
-        version,
-        plugins,
-        getConfig: () => config,
-        setConfig: (next) => {
-          config = next;
-          saveConfig(config);
-          applyFeatures();
-          syncPlugins();
-          panel?.ensureMounted();
-        },
-        defaultConfig: () => defaultConfig(plugins),
-        getPluginError: (id) => pluginHost.errorFor(id),
-        registry,
-      });
-    } catch (error) {
-      console.error('[tvmod] failed to mount panel', error);
+    if (!bridge) {
+      // Patch mode has no main-process config bridge; keep the in-chart
+      // panel so settings remain reachable without the native Settings tab.
+      try {
+        panel = mountPanel({
+          version,
+          plugins,
+          getConfig: () => config,
+          setConfig: (next) => {
+            config = next;
+            saveConfig(config);
+            applyFeatures();
+            syncPlugins();
+            panel?.ensureMounted();
+          },
+          defaultConfig: () => defaultConfig(plugins),
+          getPluginError: (id) => pluginHost.errorFor(id),
+          registry: host.registry,
+        });
+      } catch (error) {
+        console.error('[tvmod] failed to mount fallback panel', error);
+      }
     }
 
     startDomObserver(

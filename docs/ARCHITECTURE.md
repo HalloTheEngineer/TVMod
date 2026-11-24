@@ -17,7 +17,11 @@
 │ TradingView renderer         │
 │  early boot traps            │
 │  CSS + DOM observer          │
-│  shadow-DOM plugin modal     │
+│  native Settings > TVMod tab │
+└──────────────┬───────────────┘
+               │ config IPC
+┌──────────────▼───────────────┐
+│ ~/.config/tvmod/config.json  │
 └──────────────────────────────┘
 ```
 
@@ -39,12 +43,15 @@ If a chart page loaded before the preload was installed, the CLI reloads that pa
 
 The preload embeds the entire core (esbuild bundle, `electron` external). It:
 
-- skips non-top-level frames, local `file://` app pages, login/checkout/pricing routes, and `auth.*` hosts;
+- skips non-top-level frames, login/checkout/pricing routes, and `auth.*` hosts;
 - runs `webFrame.executeJavaScript` before the page’s inline scripts to install accessors for `initData`, `user`, `shopConf`, and `featureToggleState`;
 - inserts page CSS for promo/declutter selectors;
-- after `DOMContentLoaded`, applies DOM tags, mounts the shadow-DOM plugin modal, and starts a throttled `MutationObserver`.
+- after `DOMContentLoaded`, applies DOM tags and starts a throttled `MutationObserver`;
+- in the desktop settings dialog (`app/dialog-window/index.html`), waits for the native Settings component and injects a TVMod tab plus an embedded settings view.
 
 The boot traps remove offer buttons/offers, set known promo and ad-detection feature flags to `0`, disable AI Copilot flags, hide desktop “Analyze markets in TradingView Desktop” upgrade overlays, and apply Privacy Shield feature flags. The upgrade-overlay blocker watches added DOM nodes for the exact desktop-upgrade copy and tags the containing dialog/overlay with `data-tvmod-upgrade`; a DOM fallback also scans modal-like containers. When Privacy Shield is enabled, the boot script also wraps `fetch`, `XMLHttpRequest`, and `sendBeacon` to block a curated tracker/ad host list. Paywall, trial, and entitlement flags are deliberately excluded.
+
+The desktop Settings window is a 633×650 frameless dialog with a 200px native tab column and the page pane. TVMod clones a native tab, labels it **TVMod**, and adds an opaque grid overlay for the embedded settings view. A `MutationObserver` re-creates the tab/overlay after React renders and preserves the active selection. `Ctrl+Shift+M` asks the main process to trigger the app’s native `Ctrl+,` shortcut; a short-lived IPC flag focuses the TVMod tab once the window opens.
 
 ## Plugin config
 
@@ -58,7 +65,7 @@ Plugins are declared in `src/core/plugins.ts`:
 - `reduce-motion` (default off)
 - `quick-actions` (default off, typed button/hotkey settings)
 
-State is stored in `localStorage` under `tvmod.config.v2`:
+State is stored in `~/.config/tvmod/config.json` on Linux (`~/Library/Application Support/tvmod/config.json` on macOS, `%APPDATA%\tvmod\config.json` on Windows), with this shape:
 
 ```json
 {
@@ -75,9 +82,11 @@ State is stored in `localStorage` under `tvmod.config.v2`:
 }
 ```
 
-The preload reads this synchronously before installing the boot traps, so boot filtering reflects the user’s choices on the next page load. The plugin modal writes the same key and updates the current page’s CSS attributes immediately. The legacy `tvmod.settings.v1` flat layout is migrated on first load.
+The main-process bootstrap owns the config file and exposes `tvmod:config:load`, `save`, `migrate`, and `request` IPC. Chart pages read it synchronously before installing boot traps, so boot filtering reflects the user’s choices on the next page load. Saves are broadcast to every TradingView page and the settings window; chart pages also mirror the config to `tvmod.config.v2` in local storage for downgrade compatibility. The legacy `tvmod.settings.v1` flat layout is migrated on first load, and a missing file is recovered from an open TradingView page on demand.
 
-A gear button at the bottom-right of TradingView opens the modal. `Ctrl+Shift+M` toggles it; search filters the plugin list; a reload banner appears when Adblock changes; **Reset defaults** restores the plugin defaults.
+The **TVMod** tab in the native desktop Settings window (`Ctrl+,`) opens the embedded settings view. `Ctrl+Shift+M` opens Settings with TVMod selected. Search filters the plugin list; a reload banner appears when a boot-time plugin changes; **Reset defaults** restores the plugin defaults.
+
+The preload probes `tvmod:config:probe`. The bootstrap answers only in launcher mode, so patch installs omit the native tab and retain the in-chart panel with `localStorage`-backed settings.
 
 ### Local plugins
 
@@ -87,11 +96,11 @@ External plugins live under `~/.local/share/tvmod/plugins/<id>/` (`manifest.json
 globalThis.__TVMOD_EXTERNAL_PLUGINS__ = [ ... ];
 ```
 
-Built-in definitions declare a category (`ads`, `interface`, `accessibility`, `tools`, `other`). The panel groups plugins by category and filters empty sections during search. External manifests can set the same field.
+Built-in definitions declare a category (`ads`, `interface`, `accessibility`, `tools`, `other`). The settings view groups plugins by category and filters empty sections during search. External manifests can set the same field.
 
-The core validates the embedded data again, adds external definitions to the panel, and uses `PluginHost` to start/stop enabled plugins. Each plugin gets a capability context (`dom`, `style`, `storage`, optional `events`), typed settings, namespaced storage, `ctx.onCleanup`, and lifecycle cleanup.
+The core validates the embedded data again, adds external definitions to the settings view, and uses `PluginHost` to start/stop enabled plugins. Each plugin gets a capability context (`dom`, `style`, `storage`, optional `events`), typed settings, namespaced storage, `ctx.onCleanup`, and lifecycle cleanup.
 
-SDK v2 settings are normalized against validated manifest definitions before they reach the plugin. The panel renders boolean toggles, text/number inputs, and select dropdowns. A plugin can export `onSettingsChange` to update in place; otherwise the host stops and restarts it. `ctx.onCleanup` callbacks, injected styles, DOM observers, and event subscriptions are disposed on stop. The event bus is renderer-local, permissioned, capped per plugin, and isolates handler failures. Exceptions are caught and shown as an `error` badge in the modal; the panel remains usable.
+SDK v2 settings are normalized against validated manifest definitions before they reach the plugin. The settings view renders boolean toggles, text/number inputs, and select dropdowns. A plugin can export `onSettingsChange` to update in place; otherwise the host stops and restarts it. `ctx.onCleanup` callbacks, injected styles, DOM observers, and event subscriptions are disposed on stop. The event bus is renderer-local, permissioned, capped per plugin, and isolates handler failures. Exceptions are caught and shown as an `error` badge in the TVMod tab; the settings view remains usable.
 
 Plugin code is executed with `new Function(...)` in the preload context with `require` and `process` shadowed as `undefined`. It has no Node.js or Electron IPC access, but it can still access page APIs such as `fetch` and the DOM. Treat local plugins as trusted code.
 
@@ -109,11 +118,11 @@ Patch mode embeds the composed preload snapshot; after plugin changes run `tvmod
 
 In launcher mode, the main-process bootstrap starts a loopback HTTP server with a random token stored in `~/.local/state/tvmod/control.json` (mode 0600). `plugin add/remove/refresh/install` calls `POST /reload` to reload TradingView pages after recomposing the preload. Patch mode has no main-process control server and still requires `tvmod repair --yes` or a manual reload.
 
-The main-process bootstrap also registers the registry IPC handlers: `tvmod:registry:list`, `sources`, `add`, `remove`, `pick-key`, `install`, and `tvmod:reload`. The preload exposes them to the isolated core only; the panel's Registry tab uses them for browsing, registry management, updates, and page reloads. Handlers validate plugin ids, registry names, URLs, and public-key shape, use `execFile` (or `spawn` with stdin for key import) without a shell, and return structured results. They exist only in launcher mode, which is why patch installs still use the CLI.
+The main-process bootstrap also registers the registry IPC handlers: `tvmod:registry:list`, `sources`, `add`, `remove`, `pick-key`, `install`, and `tvmod:reload`. The preload exposes them to the isolated core only; the TVMod settings tab's Registry view uses them for browsing, registry management, updates, and page reloads. Handlers validate plugin ids, registry names, URLs, and public-key shape, use `execFile` (or `spawn` with stdin for key import) without a shell, and return structured results. They exist only in launcher mode, which is why patch installs still use the CLI.
 
-Bulk updates run `plugin install ... --no-reload` sequentially, then call the shared page-reload helper once. Partial failures leave the page open so the panel can show which plugins failed and offer a manual reload.
+Bulk updates run `plugin install ... --no-reload` sequentially, then call the shared page-reload helper once. Partial failures leave the page open so the settings view can show which plugins failed and offer a manual reload.
 
-Successful registry installs write `<data dir>/registry-installs.json` with the source registry, index URL, version, and timestamp. `plugin browse --json` includes `installedVersion` and `sourceRegistry`; the panel and bulk-update planner use them to choose the source registry when multiple registries publish the same id. Local plugin add/remove clears the record. Provenance is advisory and never bypasses registry signature checks.
+Successful registry installs write `<data dir>/registry-installs.json` with the source registry, index URL, version, and timestamp. `plugin browse --json` includes `installedVersion` and `sourceRegistry`; the settings view and bulk-update planner use them to choose the source registry when multiple registries publish the same id. Local plugin add/remove clears the record. Provenance is advisory and never bypasses registry signature checks.
 
 ## Platform layers
 

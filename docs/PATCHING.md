@@ -1,6 +1,6 @@
 # Patch backend
 
-Status: **implemented in v0.14.1 for user-writable copies and root-owned installs with explicit elevation**. It is optional; the launcher remains the default.
+Status: **implemented in v0.15.0 for user-writable copies and root-owned installs with explicit elevation**. It is optional; the launcher remains the default.
 
 ## Why it is optional
 
@@ -65,7 +65,7 @@ Local plugins are embedded into the installed preload. If you add, remove, or re
 
 - Synthetic ASAR fixture: patch, verify, install, restore, verify byte-identical. This runs in CI.
 - Elevated replacement is tested with a fake `sudo` shim against a synthetic ASAR; the real sudo/pkexec prompt is user-driven.
-- Copy of the real 3.5.0 app: patch, launch, verify `window.__TVMOD_ACTIVE__`, panel, and promo filters; then unpatch and verify the original hash. This was validated manually on 3.5.0.
+- Copy of the real 3.5.0 app: patch, launch, verify `window.__TVMOD_ACTIVE__`, the Settings → TVMod tab, and promo filters; then unpatch and verify the original hash. This was validated manually on 3.5.0.
 - Repair across a simulated update: restore the original ASAR, run `repair`, verify the new patched hash.
 - Permission-denied and Snap paths are refused.
 
