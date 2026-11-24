@@ -11,7 +11,10 @@ import type {
   RegistrySource,
 } from './host.js';
 import { planRegistryUpdates } from './registry-updates.js';
-import type { PanelPlugin } from './plugin-types.js';
+import type {
+  PanelPlugin,
+  PluginSettingValue,
+} from './plugin-types.js';
 
 const PANEL_ID = 'tvmod-root';
 
@@ -144,6 +147,18 @@ const PANEL_STYLE = `
     gap: 10px; padding: 3px 0; cursor: pointer;
   }
   .plugin-setting span { color: #b7c0c9; font-size: 11px; }
+  .plugin-setting-stack {
+    display: grid; grid-template-columns: minmax(0, 1fr);
+    align-items: stretch; gap: 4px; padding: 5px 0; cursor: default;
+  }
+  .plugin-setting-stack > span { color: #b7c0c9; font-size: 11px; }
+  .setting-input, .setting-select {
+    width: 100%; min-width: 0; padding: 5px 7px;
+    border: 1px solid #3a3f46; border-radius: 6px;
+    background: #0f1216; color: #e9ecef; font: inherit; font-size: 11px;
+    outline: none;
+  }
+  .setting-input:focus, .setting-select:focus { border-color: #4c8dff; }
 
   .plugin-error { margin-top: 6px; color: #ff9b9b; font-size: 10.5px; }
   .empty { padding: 24px 12px; color: #8f98a3; text-align: center; }
@@ -327,6 +342,10 @@ function gearSvg(): string {
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.12.55-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.34.61.22l2.39-.96c.5.39 1.05.7 1.63.94l.36 2.54c.04.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.55 1.63-.94l2.39.96c.19.12.47.02.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/></svg>`;
 }
 
+interface SettingBinding {
+  set(value: PluginSettingValue): void;
+}
+
 export function mountPanel(options: PanelOptions): PanelHandle | null {
   if (document.getElementById(PANEL_ID)) return null;
 
@@ -484,7 +503,7 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
       card: HTMLElement;
       input: HTMLInputElement;
       settings: HTMLElement;
-      settingInputs: Map<string, HTMLInputElement>;
+      settingInputs: Map<string, SettingBinding>;
       error: HTMLElement;
       badges: HTMLElement;
     }
@@ -540,38 +559,136 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
     const settings = document.createElement('div');
     settings.className = 'plugin-settings';
-    const settingInputs = new Map<string, HTMLInputElement>();
+    const settingInputs = new Map<string, SettingBinding>();
+
+    const commitSetting = (
+      settingKey: string,
+      value: PluginSettingValue
+    ): void => {
+      config = withPluginSetting(config, plugin.id, settingKey, value);
+      options.setConfig(config);
+      sync();
+    };
 
     for (const setting of plugin.settings ?? []) {
-      const row = document.createElement('label');
+      const row = document.createElement('div');
       row.className = 'plugin-setting';
 
       const text = document.createElement('span');
       text.textContent = setting.name;
       if (setting.description) text.title = setting.description;
 
-      const toggle = document.createElement('label');
-      toggle.className = 'switch small';
+      if (setting.type === 'boolean') {
+        const toggle = document.createElement('label');
+        toggle.className = 'switch small';
 
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.setAttribute('aria-label', setting.name);
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.setAttribute('aria-label', setting.name);
 
-      const slider = document.createElement('span');
-      slider.className = 'slider';
+        const slider = document.createElement('span');
+        slider.className = 'slider';
 
-      toggle.append(input, slider);
-      row.append(text, toggle);
+        toggle.append(input, slider);
+        row.append(text, toggle);
+        settings.append(row);
+
+        input.addEventListener('change', (event) => {
+          event.stopPropagation();
+          commitSetting(setting.key, input.checked);
+        });
+
+        settingInputs.set(setting.key, {
+          set: (value) => {
+            input.checked = value === true;
+          },
+        });
+        continue;
+      }
+
+      row.classList.add('plugin-setting-stack');
+
+      if (setting.type === 'string') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'setting-input';
+        input.maxLength = 200;
+        input.placeholder = setting.placeholder ?? '';
+        input.setAttribute('aria-label', setting.name);
+        input.addEventListener('change', (event) => {
+          event.stopPropagation();
+          commitSetting(setting.key, input.value);
+        });
+
+        row.append(text, input);
+        settingInputs.set(setting.key, {
+          set: (value) => {
+            input.value = typeof value === 'string' ? value : String(value);
+          },
+        });
+      } else if (setting.type === 'number') {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'setting-input';
+        input.setAttribute('aria-label', setting.name);
+        if (setting.min !== undefined) input.min = String(setting.min);
+        if (setting.max !== undefined) input.max = String(setting.max);
+        input.step =
+          setting.step !== undefined ? String(setting.step) : 'any';
+
+        const binding: SettingBinding = {
+          set: (value) => {
+            input.value = typeof value === 'number' ? String(value) : '';
+          },
+        };
+
+        input.addEventListener('change', (event) => {
+          event.stopPropagation();
+          const parsed = input.valueAsNumber;
+          if (!Number.isFinite(parsed)) {
+            const current =
+              config.plugins[plugin.id]?.settings?.[setting.key] ??
+              setting.default;
+            binding.set(current as PluginSettingValue);
+            return;
+          }
+
+          let value = parsed;
+          if (setting.min !== undefined && value < setting.min) {
+            value = setting.min;
+          }
+          if (setting.max !== undefined && value > setting.max) {
+            value = setting.max;
+          }
+          commitSetting(setting.key, value);
+        });
+
+        row.append(text, input);
+        settingInputs.set(setting.key, binding);
+      } else {
+        const select = document.createElement('select');
+        select.className = 'setting-select';
+        select.setAttribute('aria-label', setting.name);
+        for (const option of setting.options) {
+          const element = document.createElement('option');
+          element.value = option.value;
+          element.textContent = option.label;
+          select.append(element);
+        }
+        select.addEventListener('change', (event) => {
+          event.stopPropagation();
+          commitSetting(setting.key, select.value);
+        });
+
+        row.append(text, select);
+        settingInputs.set(setting.key, {
+          set: (value) => {
+            select.value = typeof value === 'string' ? value : String(value);
+          },
+        });
+      }
+
       settings.append(row);
-
-      input.addEventListener('change', (event) => {
-        event.stopPropagation();
-        config = withPluginSetting(config, plugin.id, setting.key, input.checked);
-        options.setConfig(config);
-        sync();
-      });
-
-      settingInputs.set(setting.key, input);
     }
 
     const error = document.createElement('div');
@@ -1265,9 +1382,11 @@ export function mountPanel(options: PanelOptions): PanelHandle | null {
 
       const state = config.plugins[plugin.id];
       for (const setting of plugin.settings ?? []) {
-        const input = entry.settingInputs.get(setting.key);
-        if (input) {
-          input.checked = state?.settings?.[setting.key] ?? setting.default;
+        const binding = entry.settingInputs.get(setting.key);
+        if (binding) {
+          binding.set(
+            state?.settings?.[setting.key] ?? setting.default
+          );
         }
       }
       entry.settings.hidden = !on || !(plugin.settings?.length ?? 0);

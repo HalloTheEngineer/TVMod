@@ -5,6 +5,7 @@ import {
   CONFIG_KEY,
   LEGACY_SETTINGS_KEY,
   defaultConfig,
+  getPluginSettings,
   isPluginEnabled,
   loadConfig,
   migrateLegacySettings,
@@ -12,6 +13,7 @@ import {
   withPluginEnabled,
   withPluginSetting,
 } from '../src/core/config.js';
+import type { PanelPlugin } from '../src/core/plugin-types.js';
 import { inferFlavor } from '../src/lib/app-detect.js';
 import {
   preloadTargetForFlavor,
@@ -49,7 +51,9 @@ test('normalizeConfig merges external plugin settings with defaults', () => {
     description: 'test',
     defaultEnabled: false,
     external: true,
-    settings: [{ key: 'foo', name: 'Foo', default: true }],
+    settings: [
+      { key: 'foo', name: 'Foo', type: 'boolean' as const, default: true },
+    ],
   };
 
   const config = normalizeConfig(
@@ -70,6 +74,119 @@ test('withPluginSetting preserves the enabled state', () => {
   const config = withPluginSetting(defaultConfig(), 'adblock', 'foo', true);
   assert.equal(isPluginEnabled(config, 'adblock'), true);
   assert.equal(config.plugins.adblock?.settings?.foo, true);
+});
+
+test('normalizeConfig validates typed setting values', () => {
+  const external: PanelPlugin = {
+    id: 'typed',
+    name: 'Typed',
+    description: '',
+    defaultEnabled: true,
+    external: true,
+    settings: [
+      { key: 'flag', name: 'Flag', type: 'boolean', default: true },
+      { key: 'text', name: 'Text', type: 'string', default: 'hello' },
+      {
+        key: 'size',
+        name: 'Size',
+        type: 'number',
+        default: 8,
+        min: 5,
+        max: 10,
+      },
+      {
+        key: 'mode',
+        name: 'Mode',
+        type: 'select',
+        default: 'a',
+        options: [
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' },
+        ],
+      },
+    ],
+  };
+
+  const config = normalizeConfig(
+    {
+      version: 2,
+      plugins: {
+        typed: {
+          enabled: true,
+          settings: {
+            flag: 'nope',
+            text: 42,
+            size: 99,
+            mode: 'missing',
+          },
+        },
+      },
+    },
+    [external]
+  );
+
+  assert.deepEqual(config.plugins.typed?.settings, {
+    flag: true,
+    text: 'hello',
+    size: 10,
+    mode: 'a',
+  });
+  assert.deepEqual(getPluginSettings(config, external), {
+    flag: true,
+    text: 'hello',
+    size: 10,
+    mode: 'a',
+  });
+});
+
+test('normalizeConfig accepts typed values within their constraints', () => {
+  const external: PanelPlugin = {
+    id: 'typed',
+    name: 'Typed',
+    description: '',
+    defaultEnabled: false,
+    external: true,
+    settings: [
+      { key: 'text', name: 'Text', type: 'string', default: 'hello' },
+      {
+        key: 'size',
+        name: 'Size',
+        type: 'number',
+        default: 8,
+        min: 5,
+        max: 10,
+      },
+      {
+        key: 'mode',
+        name: 'Mode',
+        type: 'select',
+        default: 'a',
+        options: [
+          { value: 'a', label: 'A' },
+          { value: 'b', label: 'B' },
+        ],
+      },
+    ],
+  };
+
+  const config = normalizeConfig(
+    {
+      version: 2,
+      plugins: {
+        typed: {
+          enabled: true,
+          settings: { text: 'custom', size: 7, mode: 'b' },
+        },
+      },
+    },
+    [external]
+  );
+
+  assert.deepEqual(config.plugins.typed?.settings, {
+    text: 'custom',
+    size: 7,
+    mode: 'b',
+  });
 });
 
 test('legacy flat settings migrate to plugin state', () => {

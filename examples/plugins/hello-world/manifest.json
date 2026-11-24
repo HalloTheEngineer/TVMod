@@ -1,8 +1,8 @@
 {
   "id": "hello-world",
   "name": "Hello World",
-  "description": "Adds a small example badge to the page and demonstrates plugin lifecycle, settings, permissions, and storage.",
-  "version": "1.0.0",
+  "description": "Adds a small example badge to the page and demonstrates typed settings, lifecycle cleanup, permissions, and storage.",
+  "version": "2.0.0",
   "author": "TVMod",
   "main": "index.js",
   "defaultEnabled": false,
@@ -12,7 +12,37 @@
       "key": "showBadge",
       "name": "Show example badge",
       "description": "Display a small TVMod example badge in the chart.",
+      "type": "boolean",
       "default": true
+    },
+    {
+      "key": "badgeText",
+      "name": "Badge text",
+      "description": "Text shown in the example badge.",
+      "type": "string",
+      "default": "TVMod example plugin",
+      "placeholder": "Badge text"
+    },
+    {
+      "key": "position",
+      "name": "Badge position",
+      "description": "Pin the badge to the lower-left or lower-right corner.",
+      "type": "select",
+      "default": "left",
+      "options": [
+        { "value": "left", "label": "Lower left" },
+        { "value": "right", "label": "Lower right" }
+      ]
+    },
+    {
+      "key": "fontSize",
+      "name": "Badge font size",
+      "description": "Font size in pixels.",
+      "type": "number",
+      "default": 11,
+      "min": 9,
+      "max": 20,
+      "step": 1
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Patch backend
 
-Status: **implemented in v0.11.0 for user-writable copies and root-owned installs with explicit elevation**. It is optional; the launcher remains the default.
+Status: **implemented in v0.12.0 for user-writable copies and root-owned installs with explicit elevation**. It is optional; the launcher remains the default.
 
 ## Why it is optional
 

@@ -2,9 +2,17 @@
  * Example TVMod plugin.
  *
  * Plugins are plain CommonJS files. `start(ctx)` runs when the plugin is
- * enabled (or when a setting changes), and the returned function runs on
- * disable/reload.
+ * enabled. `onSettingsChange(change)` updates the badge without restarting the
+ * plugin. Registered cleanups run when the plugin is disabled or reloaded.
  */
+function applyBadge(badge, settings) {
+  badge.hidden = !settings.showBadge;
+  badge.textContent = settings.badgeText;
+  badge.style.left = settings.position === 'right' ? 'auto' : '12px';
+  badge.style.right = settings.position === 'right' ? '12px' : 'auto';
+  badge.style.fontSize = `${settings.fontSize}px`;
+}
+
 module.exports = {
   start(ctx) {
     ctx.log('started', ctx.settings);
@@ -13,20 +21,14 @@ module.exports = {
     ctx.storage.set('runs', runs);
     ctx.log('start count', runs);
 
-    if (!ctx.settings.showBadge) {
-      return () => {};
-    }
-
     const mount = ctx.dom.query('body') ?? document.documentElement;
     const badge = document.createElement('div');
     badge.id = 'tvmod-example-badge';
-    badge.textContent = 'TVMod example plugin';
     mount.appendChild(badge);
 
     const removeStyle = ctx.style.add(`
       #tvmod-example-badge {
         position: fixed;
-        left: 12px;
         bottom: 72px;
         z-index: 2147483640;
         padding: 4px 8px;
@@ -34,14 +36,26 @@ module.exports = {
         border-radius: 6px;
         background: #14171b;
         color: #d6dde5;
-        font: 11px/1.4 ui-sans-serif, system-ui, sans-serif;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        line-height: 1.4;
         pointer-events: none;
       }
     `);
 
-    return () => {
+    applyBadge(badge, ctx.settings);
+
+    ctx.onCleanup(() => {
       badge.remove();
       removeStyle();
-    };
+    });
+  },
+
+  onSettingsChange({ settings, changed }) {
+    const badge = document.getElementById('tvmod-example-badge');
+    if (badge) applyBadge(badge, settings);
+    console.log(
+      '[tvmod:hello-world] settings changed',
+      changed.join(', ') || '(none)'
+    );
   },
 };

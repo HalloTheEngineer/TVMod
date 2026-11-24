@@ -81,7 +81,9 @@ External plugins live under `~/.local/share/tvmod/plugins/<id>/` (`manifest.json
 globalThis.__TVMOD_EXTERNAL_PLUGINS__ = [ ... ];
 ```
 
-The core validates the embedded data again, adds external definitions to the panel, and uses `PluginHost` to start/stop enabled plugins. Each plugin gets a capability context (`dom`, `style`, `storage`), boolean settings, namespaced storage, and lifecycle cleanup. Settings changes restart the plugin. Exceptions are caught and shown as an `error` badge in the modal; the panel remains usable.
+The core validates the embedded data again, adds external definitions to the panel, and uses `PluginHost` to start/stop enabled plugins. Each plugin gets a capability context (`dom`, `style`, `storage`, optional `events`), typed settings, namespaced storage, `ctx.onCleanup`, and lifecycle cleanup.
+
+SDK v2 settings are normalized against validated manifest definitions before they reach the plugin. The panel renders boolean toggles, text/number inputs, and select dropdowns. A plugin can export `onSettingsChange` to update in place; otherwise the host stops and restarts it. `ctx.onCleanup` callbacks, injected styles, DOM observers, and event subscriptions are disposed on stop. The event bus is renderer-local, permissioned, capped per plugin, and isolates handler failures. Exceptions are caught and shown as an `error` badge in the modal; the panel remains usable.
 
 Plugin code is executed with `new Function(...)` in the preload context with `require` and `process` shadowed as `undefined`. It has no Node.js or Electron IPC access, but it can still access page APIs such as `fetch` and the DOM. Treat local plugins as trusted code.
 

@@ -10,6 +10,113 @@ import { isBuiltinPluginId } from './plugins.js';
 const MAX_SOURCE_BYTES = 512 * 1024;
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 
+function text(value: unknown, min: number, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length >= min && trimmed.length <= max ? trimmed : null;
+}
+
+function normalizeSetting(value: unknown): PluginSettingDefinition | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+
+  const key = text(item.key, 1, 49);
+  const name = text(item.name, 1, 100);
+  if (!key || !name) return null;
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,48}$/.test(key)) return null;
+
+  const description =
+    item.description === undefined
+      ? undefined
+      : text(item.description, 0, 300) ?? undefined;
+  const type =
+    item.type === undefined && typeof item.default === 'boolean'
+      ? 'boolean'
+      : item.type;
+
+  if (type === 'boolean') {
+    if (typeof item.default !== 'boolean') return null;
+    return { key, name, description, type: 'boolean', default: item.default };
+  }
+
+  if (type === 'string') {
+    const defaultValue = text(item.default, 0, 200);
+    if (defaultValue === null) return null;
+    const placeholder =
+      item.placeholder === undefined
+        ? undefined
+        : text(item.placeholder, 0, 100) ?? undefined;
+    return {
+      key,
+      name,
+      description,
+      type: 'string',
+      default: defaultValue,
+      ...(placeholder ? { placeholder } : {}),
+    };
+  }
+
+  if (type === 'number') {
+    if (typeof item.default !== 'number' || !Number.isFinite(item.default)) {
+      return null;
+    }
+    const min =
+      typeof item.min === 'number' && Number.isFinite(item.min)
+        ? item.min
+        : undefined;
+    const max =
+      typeof item.max === 'number' && Number.isFinite(item.max)
+        ? item.max
+        : undefined;
+    const step =
+      typeof item.step === 'number' &&
+      Number.isFinite(item.step) &&
+      item.step > 0
+        ? item.step
+        : undefined;
+    if (min !== undefined && max !== undefined && min > max) return null;
+    if (min !== undefined && item.default < min) return null;
+    if (max !== undefined && item.default > max) return null;
+    return {
+      key,
+      name,
+      description,
+      type: 'number',
+      default: item.default,
+      ...(min !== undefined ? { min } : {}),
+      ...(max !== undefined ? { max } : {}),
+      ...(step !== undefined ? { step } : {}),
+    };
+  }
+
+  if (type === 'select') {
+    if (!Array.isArray(item.options) || item.options.length === 0) return null;
+    const options: Array<{ value: string; label: string }> = [];
+    const seen = new Set<string>();
+    for (const raw of item.options.slice(0, 32)) {
+      if (!raw || typeof raw !== 'object') return null;
+      const entry = raw as Record<string, unknown>;
+      const optionValue = text(entry.value, 1, 100);
+      const label = text(entry.label ?? entry.value, 1, 100);
+      if (!optionValue || !label || seen.has(optionValue)) return null;
+      seen.add(optionValue);
+      options.push({ value: optionValue, label });
+    }
+    const defaultValue = text(item.default, 1, 100);
+    if (!defaultValue || !seen.has(defaultValue)) return null;
+    return {
+      key,
+      name,
+      description,
+      type: 'select',
+      default: defaultValue,
+      options,
+    };
+  }
+
+  return null;
+}
+
 function normalizeManifest(raw: unknown): ExternalPluginManifest | null {
   if (!raw || typeof raw !== 'object') return null;
   const value = raw as Record<string, unknown>;
@@ -30,23 +137,9 @@ function normalizeManifest(raw: unknown): ExternalPluginManifest | null {
 
   const settings: PluginSettingDefinition[] = [];
   if (Array.isArray(value.settings)) {
-    for (const entry of value.settings) {
-      if (!entry || typeof entry !== 'object') continue;
-      const item = entry as Record<string, unknown>;
-      if (
-        typeof item.key !== 'string' ||
-        typeof item.name !== 'string' ||
-        typeof item.default !== 'boolean'
-      ) {
-        continue;
-      }
-      settings.push({
-        key: item.key,
-        name: item.name,
-        description:
-          typeof item.description === 'string' ? item.description : undefined,
-        default: item.default,
-      });
+    for (const entry of value.settings.slice(0, 32)) {
+      const setting = normalizeSetting(entry);
+      if (setting) settings.push(setting);
     }
   }
 

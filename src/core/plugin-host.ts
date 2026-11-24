@@ -1,28 +1,37 @@
-import type { TvmodConfig } from './config.js';
+import { sanitizeSettingValue, type TvmodConfig } from './config.js';
 import type { Host } from './host.js';
 import type {
   EmbeddedPlugin,
   ExternalPluginManifest,
   PluginPermission,
-  PluginSettingDefinition,
+  PluginSettings,
 } from './plugin-types.js';
 
-interface Runtime {
-  signature: string;
-  cleanup?: () => void | Promise<void>;
-  error?: string;
+export interface SettingsChange {
+  settings: Readonly<PluginSettings>;
+  previous: Readonly<PluginSettings>;
+  changed: string[];
 }
 
-interface SettingsRecord {
-  [key: string]: boolean;
+export interface PluginEvents {
+  on(
+    name: string,
+    handler: (payload: unknown, from: string) => unknown
+  ): () => void;
+  once(
+    name: string,
+    handler: (payload: unknown, from: string) => unknown
+  ): () => void;
+  emit(name: string, payload?: unknown): void;
 }
 
-interface PluginContext {
+export interface PluginContext {
   id: string;
   manifest: ExternalPluginManifest;
-  settings: Readonly<SettingsRecord>;
+  settings: Readonly<PluginSettings>;
   app: { version: string; host: 'desktop'; platform: string };
   log: (...args: unknown[]) => void;
+  onCleanup(cleanup: () => void | Promise<void>): void;
   dom?: {
     query<T extends Element = Element>(selector: string): T | null;
     queryAll<T extends Element = Element>(selector: string): T[];
@@ -38,18 +47,47 @@ interface PluginContext {
     set(key: string, value: unknown): void;
     remove(key: string): void;
   };
+  events?: PluginEvents;
 }
 
-function defaultSettings(
-  settings: PluginSettingDefinition[] | undefined
-): SettingsRecord {
-  return Object.fromEntries(
-    (settings ?? []).map((setting) => [setting.key, setting.default])
-  );
+interface PluginExports {
+  start?: (ctx: PluginContext) => unknown;
+  stop?: (ctx: PluginContext) => unknown;
+  onSettingsChange?: (change: SettingsChange) => unknown;
+}
+
+interface Runtime {
+  signature: string;
+  settings: PluginSettings;
+  exports?: PluginExports;
+  context?: PluginContext;
+  cleanup?: () => void | Promise<void>;
+  dispose?: () => void | Promise<void>;
+  error?: string;
+}
+
+interface EventListener {
+  pluginId: string;
+  handler: (payload: unknown, from: string) => unknown;
+}
+
+const EVENT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/;
+const MAX_EVENT_LISTENERS = 200;
+
+
+function changedKeys(
+  previous: PluginSettings,
+  next: PluginSettings
+): string[] {
+  const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
+  return [...keys]
+    .filter((key) => previous[key] !== next[key])
+    .sort();
 }
 
 export class PluginHost {
   private readonly runtimes = new Map<string, Runtime>();
+  private readonly eventListeners = new Map<string, Set<EventListener>>();
   private queue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -84,14 +122,45 @@ export class PluginHost {
         continue;
       }
 
-      const settings: SettingsRecord = {
-        ...defaultSettings(plugin.manifest.settings),
-        ...(state.settings ?? {}),
-      };
+      const settings: PluginSettings = Object.fromEntries(
+        (plugin.manifest.settings ?? []).map((setting) => [
+          setting.key,
+          sanitizeSettingValue(
+            setting,
+            setting.key in (state.settings ?? {})
+              ? state.settings?.[setting.key]
+              : setting.default
+          ),
+        ])
+      );
       const signature = JSON.stringify(settings);
       const runtime = this.runtimes.get(id);
 
       if (runtime && runtime.signature === signature) continue;
+
+      if (runtime?.exports?.onSettingsChange) {
+        const previous = runtime.settings;
+        const changed = changedKeys(previous, settings);
+        try {
+          await Promise.resolve(
+            runtime.exports.onSettingsChange({
+              settings: Object.freeze({ ...settings }),
+              previous: Object.freeze({ ...previous }),
+              changed,
+            })
+          );
+          runtime.settings = settings;
+          runtime.signature = signature;
+          continue;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.error(`[tvmod:${id}] onSettingsChange failed:`, error);
+          await this.stop(id);
+          this.runtimes.set(id, { signature, settings, error: message });
+          continue;
+        }
+      }
 
       await this.stop(id);
       await this.start(plugin, settings, signature);
@@ -100,13 +169,18 @@ export class PluginHost {
 
   private async start(
     plugin: EmbeddedPlugin,
-    settings: SettingsRecord,
+    settings: PluginSettings,
     signature: string
   ): Promise<void> {
     const id = plugin.manifest.id;
+    let context: PluginContext | null = null;
+    let dispose: (() => void | Promise<void>) | undefined;
 
     try {
-      const ctx = this.createContext(plugin, settings, signature);
+      const created = this.createContext(plugin, settings);
+      context = created.context;
+      dispose = created.dispose;
+
       const module = { exports: {} as Record<string, unknown> };
       const factory = new Function(
         'module',
@@ -117,18 +191,15 @@ export class PluginHost {
         `"use strict";\n${plugin.source}`
       );
 
-      factory(module, module.exports, ctx, undefined, undefined);
+      factory(module, module.exports, context, undefined, undefined);
 
-      const exported = module.exports as {
-        start?: (ctx: PluginContext) => unknown;
-        stop?: (ctx: PluginContext) => unknown;
-      };
+      const exported = module.exports as PluginExports;
 
       if (typeof exported.start !== 'function') {
         throw new Error('plugin must export a start(ctx) function');
       }
 
-      const result = await Promise.resolve(exported.start(ctx));
+      const result = await Promise.resolve(exported.start(context));
 
       let cleanup: (() => void | Promise<void>) | undefined;
       if (typeof result === 'function') {
@@ -137,20 +208,34 @@ export class PluginHost {
         result &&
         typeof (result as { stop?: unknown }).stop === 'function'
       ) {
-        cleanup = () => {
-          (result as { stop: () => unknown }).stop();
+        cleanup = async () => {
+          await (result as { stop: () => unknown }).stop();
         };
       } else if (typeof exported.stop === 'function') {
-        cleanup = () => {
-          exported.stop?.(ctx);
+        cleanup = async () => {
+          await exported.stop?.(context as PluginContext);
         };
       }
 
-      this.runtimes.set(id, { signature, cleanup });
+      this.runtimes.set(id, {
+        signature,
+        settings,
+        exports: exported,
+        context,
+        cleanup,
+        dispose,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[tvmod:${id}] plugin failed to start:`, error);
-      this.runtimes.set(id, { signature, error: message });
+      if (dispose) {
+        try {
+          await Promise.resolve(dispose());
+        } catch {
+          // Ignore cleanup failures while reporting the start error.
+        }
+      }
+      this.runtimes.set(id, { signature, settings, error: message });
     }
   }
 
@@ -159,24 +244,52 @@ export class PluginHost {
     if (!runtime) return;
     this.runtimes.delete(id);
 
-    if (!runtime.cleanup) return;
+    if (runtime.cleanup) {
+      try {
+        await Promise.resolve(runtime.cleanup());
+      } catch (error) {
+        console.error(`[tvmod:${id}] plugin cleanup failed:`, error);
+      }
+    }
 
-    try {
-      await Promise.resolve(runtime.cleanup());
-    } catch (error) {
-      console.error(`[tvmod:${id}] plugin cleanup failed:`, error);
+    if (runtime.dispose) {
+      try {
+        await Promise.resolve(runtime.dispose());
+      } catch (error) {
+        console.error(`[tvmod:${id}] plugin dispose failed:`, error);
+      }
     }
   }
 
   private createContext(
     plugin: EmbeddedPlugin,
-    settings: SettingsRecord,
-    signature: string
-  ): PluginContext {
-    void signature;
+    settings: PluginSettings
+  ): {
+    context: PluginContext;
+    dispose: () => Promise<void>;
+  } {
     const manifest = plugin.manifest;
     const id = manifest.id;
     const permissions = new Set<PluginPermission>(manifest.permissions ?? []);
+    const cleanups: Array<() => void | Promise<void>> = [];
+    const disposals: Array<() => void> = [];
+
+    const dispose = async (): Promise<void> => {
+      for (const cleanup of cleanups.splice(0).reverse()) {
+        try {
+          await Promise.resolve(cleanup());
+        } catch (error) {
+          console.error(`[tvmod:${id}] registered cleanup failed:`, error);
+        }
+      }
+      for (const off of disposals.splice(0).reverse()) {
+        try {
+          off();
+        } catch (error) {
+          console.error(`[tvmod:${id}] disposal failed:`, error);
+        }
+      }
+    };
 
     const context: PluginContext = {
       id,
@@ -189,6 +302,9 @@ export class PluginHost {
       },
       log: (...args: unknown[]) => {
         console.log(`[tvmod:${id}]`, ...args);
+      },
+      onCleanup: (cleanup) => {
+        if (typeof cleanup === 'function') cleanups.push(cleanup);
       },
     };
 
@@ -238,7 +354,9 @@ export class PluginHost {
             childList: true,
             subtree: true,
           });
-          return () => observer.disconnect();
+          const off = (): void => observer.disconnect();
+          disposals.push(off);
+          return off;
         },
       };
     }
@@ -248,7 +366,7 @@ export class PluginHost {
         add: (css) => {
           const key = this.host.insertCSS(css);
           let active = true;
-          return () => {
+          const remove = (): void => {
             if (!active) return;
             active = false;
             try {
@@ -257,6 +375,8 @@ export class PluginHost {
               // Ignore.
             }
           };
+          disposals.push(remove);
+          return remove;
         },
         hide: (selector) =>
           context.style!.add(`${selector} { display: none !important; }`),
@@ -292,6 +412,89 @@ export class PluginHost {
       };
     }
 
-    return context;
+    if (permissions.has('events')) {
+      let subscriptions = 0;
+
+      const validate = (name: string, handler: unknown): void => {
+        if (typeof name !== 'string' || !EVENT_NAME.test(name)) {
+          throw new Error(`invalid event name: ${String(name)}`);
+        }
+        if (typeof handler !== 'function') {
+          throw new Error('event handler must be a function');
+        }
+      };
+
+      const on = (
+        name: string,
+        handler: (payload: unknown, from: string) => unknown
+      ): (() => void) => {
+        validate(name, handler);
+        if (subscriptions >= MAX_EVENT_LISTENERS) {
+          throw new Error(
+            `too many event subscriptions (max ${MAX_EVENT_LISTENERS})`
+          );
+        }
+
+        subscriptions += 1;
+        const entry: EventListener = { pluginId: id, handler };
+        const listeners = this.eventListeners.get(name) ?? new Set();
+        listeners.add(entry);
+        this.eventListeners.set(name, listeners);
+
+        let active = true;
+        const off = (): void => {
+          if (!active) return;
+          active = false;
+          subscriptions -= 1;
+          listeners.delete(entry);
+          if (listeners.size === 0) this.eventListeners.delete(name);
+        };
+        disposals.push(off);
+        return off;
+      };
+
+      context.events = {
+        on,
+        once: (name, handler) => {
+          validate(name, handler);
+          const off = on(name, (payload, from) => {
+            off();
+            return handler(payload, from);
+          });
+          return off;
+        },
+        emit: (name, payload) => {
+          if (typeof name !== 'string' || !EVENT_NAME.test(name)) {
+            throw new Error(`invalid event name: ${String(name)}`);
+          }
+          const listeners = this.eventListeners.get(name);
+          if (!listeners) return;
+
+          for (const listener of [...listeners]) {
+            try {
+              const result = listener.handler(payload, id);
+              if (
+                result &&
+                typeof (result as PromiseLike<unknown>).then === 'function'
+              ) {
+                Promise.resolve(result).catch((error) => {
+                  console.error(
+                    `[tvmod:${listener.pluginId}] event ${name} handler failed:`,
+                    error
+                  );
+                });
+              }
+            } catch (error) {
+              console.error(
+                `[tvmod:${listener.pluginId}] event ${name} handler failed:`,
+                error
+              );
+            }
+          }
+        },
+      };
+    }
+
+    return { context, dispose };
   }
 }

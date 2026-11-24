@@ -1,9 +1,14 @@
-import type { PanelPlugin, PluginSettingDefinition } from './plugin-types.js';
+import type {
+  PanelPlugin,
+  PluginSettingDefinition,
+  PluginSettingValue,
+  PluginSettings,
+} from './plugin-types.js';
 import { PLUGINS } from './plugins.js';
 
 export interface PluginState {
   enabled: boolean;
-  settings?: Record<string, boolean>;
+  settings?: PluginSettings;
 }
 
 export interface TvmodConfig {
@@ -19,11 +24,61 @@ export interface StorageLike {
 export const CONFIG_KEY = 'tvmod.config.v2';
 export const LEGACY_SETTINGS_KEY = 'tvmod.settings.v1';
 
+export function sanitizeSettingValue(
+  definition: PluginSettingDefinition,
+  value: unknown
+): PluginSettingValue {
+  switch (definition.type) {
+    case 'boolean':
+      return typeof value === 'boolean' ? value : definition.default;
+    case 'string':
+      return typeof value === 'string'
+        ? value.slice(0, 200)
+        : definition.default;
+    case 'number': {
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return definition.default;
+      }
+      let next = value;
+      if (definition.min !== undefined && next < definition.min) {
+        next = definition.min;
+      }
+      if (definition.max !== undefined && next > definition.max) {
+        next = definition.max;
+      }
+      return next;
+    }
+    case 'select':
+      return typeof value === 'string' &&
+        definition.options.some((option) => option.value === value)
+        ? value
+        : definition.default;
+  }
+}
+
 function defaultsFor(
   settings: PluginSettingDefinition[] | undefined
-): Record<string, boolean> | undefined {
+): PluginSettings | undefined {
   if (!settings || settings.length === 0) return undefined;
-  return Object.fromEntries(settings.map((setting) => [setting.key, setting.default]));
+  return Object.fromEntries(
+    settings.map((setting) => [setting.key, setting.default])
+  );
+}
+
+function sanitizeSettings(
+  settings: PluginSettingDefinition[] | undefined,
+  values: Record<string, unknown>
+): PluginSettings | undefined {
+  if (!settings || settings.length === 0) return undefined;
+  return Object.fromEntries(
+    settings.map((setting) => [
+      setting.key,
+      sanitizeSettingValue(
+        setting,
+        setting.key in values ? values[setting.key] : setting.default
+      ),
+    ])
+  );
 }
 
 function makeState(plugin: PanelPlugin): PluginState {
@@ -50,6 +105,9 @@ export function normalizeConfig(
   const raw = input as { plugins?: unknown };
   if (!raw.plugins || typeof raw.plugins !== 'object') return config;
 
+  const definitions = new Map(
+    defs.map((plugin) => [plugin.id, plugin.settings])
+  );
   const plugins = raw.plugins as Record<string, unknown>;
   for (const [id, entry] of Object.entries(plugins)) {
     if (!entry || typeof entry !== 'object') continue;
@@ -58,11 +116,26 @@ export function normalizeConfig(
 
     const state: PluginState = { enabled: value.enabled };
     if (value.settings && typeof value.settings === 'object') {
-      const settings: Record<string, boolean> = {};
-      for (const [key, setting] of Object.entries(value.settings)) {
-        if (typeof setting === 'boolean') settings[key] = setting;
+      const rawSettings = value.settings as Record<string, unknown>;
+      if (definitions.has(id)) {
+        const settings = sanitizeSettings(
+          definitions.get(id),
+          rawSettings
+        );
+        if (settings) state.settings = settings;
+      } else {
+        const settings: PluginSettings = {};
+        for (const [key, setting] of Object.entries(rawSettings)) {
+          if (
+            typeof setting === 'boolean' ||
+            typeof setting === 'number' ||
+            typeof setting === 'string'
+          ) {
+            settings[key] = setting;
+          }
+        }
+        if (Object.keys(settings).length > 0) state.settings = settings;
       }
-      if (Object.keys(settings).length > 0) state.settings = settings;
     }
     config.plugins[id] = state;
   }
@@ -71,7 +144,10 @@ export function normalizeConfig(
     const state = config.plugins[plugin.id] ?? makeState(plugin);
     const defaults = defaultsFor(plugin.settings);
     if (defaults) {
-      state.settings = { ...defaults, ...(state.settings ?? {}) };
+      state.settings = sanitizeSettings(plugin.settings, state.settings ?? {})
+        ?? defaults;
+    } else {
+      delete state.settings;
     }
     config.plugins[plugin.id] = state;
   }
@@ -179,7 +255,7 @@ export function withPluginSetting(
   config: TvmodConfig,
   id: string,
   key: string,
-  value: boolean
+  value: PluginSettingValue
 ): TvmodConfig {
   const current = config.plugins[id];
   return {
@@ -197,9 +273,9 @@ export function withPluginSetting(
 export function getPluginSettings(
   config: TvmodConfig,
   plugin: PanelPlugin
-): Record<string, boolean> {
-  return {
-    ...(defaultsFor(plugin.settings) ?? {}),
-    ...(config.plugins[plugin.id]?.settings ?? {}),
-  };
+): PluginSettings {
+  const defaults = defaultsFor(plugin.settings) ?? {};
+  const stored = config.plugins[plugin.id]?.settings ?? {};
+  if (!plugin.settings) return { ...stored };
+  return sanitizeSettings(plugin.settings, { ...defaults, ...stored }) ?? {};
 }

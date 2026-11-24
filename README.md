@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and 
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.11.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
+> Status: **v0.12.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
@@ -13,7 +13,7 @@ TVMod is a small mod host for the official Electron app. Its default **launcher 
 - **Hide sidebar** — optional; removes the right widget bar.
 - **Config button** — a gear button inside the chart opens a Vencord-style plugin modal; `Ctrl+Shift+M` also works.
 - **Individual plugins** — toggle Adblock, Hide AI Copilot, Hide Community Hub, and Hide Sidebar independently.
-- **Local plugin SDK** — install single-file plugins with a manifest, permissions, boolean settings, and lifecycle cleanup.
+- **Plugin SDK v2** — single-file plugins with typed settings, lifecycle hooks, registered cleanup, and a permissioned plugin event bus.
 - **Signed plugin registry** — Ed25519-signed indexes/bundles, SHA-256 verification, pinned registry keys, and CLI browse/install.
 - **Registry browser** — a Registry tab in the gear modal lists configured registries, filters plugins, installs or updates them, and manages registry keys from the panel.
 - **Bulk updates** — the Registry tab detects available updates and can apply all of them with a single TradingView reload.
@@ -89,12 +89,12 @@ To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 ```sh
 cosign verify-blob \
   --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.11.0 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.12.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.11.0` verifies every archive signature and the combined checksum.
+The repo helper `tools/verify-release.sh 0.12.0` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -241,7 +241,9 @@ External plugins live in `~/.local/share/tvmod/plugins/<id>/` with a `manifest.j
 tvmod plugin add examples/plugins/hello-world
 ```
 
-Reload the TradingView page and enable **Hello World** in the gear modal. It demonstrates a badge, a boolean setting, permissions, storage, and cleanup. See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) for the manifest and API.
+Reload the TradingView page and enable **Hello World** in the gear modal. It demonstrates boolean, string, number, and select settings, in-place `onSettingsChange` updates, permissions, storage, and cleanup.
+
+SDK v2 also adds `ctx.onCleanup` and a permissioned plugin-to-plugin event bus (`ctx.events`). Existing v1 plugins and boolean settings remain compatible. See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) for the manifest and API.
 
 External plugins are embedded into the installed preload at install/add/refresh time. Launcher mode reloads TradingView pages automatically through a token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after changing plugins.
 
@@ -381,6 +383,7 @@ docs/                  architecture, plugin SDK, and patch design
 - [x] Mod panel and persisted settings
 - [x] Vencord-style plugin list with individual toggles and search
 - [x] Local plugin SDK v1 with manifest, permissions, settings, and lifecycle
+- [x] Plugin SDK v2 with typed settings, lifecycle hooks, cleanup registration, and events
 - [x] User-level desktop override
 - [x] Optional patch backend for user-writable installs/copies with backup/repair/unpatch
 - [x] One-command user-owned copy + patch installer

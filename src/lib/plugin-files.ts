@@ -52,6 +52,161 @@ function readString(
   return trimmed;
 }
 
+const SETTING_VALUE_MAX = 200;
+
+function optionalNumber(value: unknown, label: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+  return value;
+}
+
+function parseSetting(
+  raw: Record<string, unknown>,
+  seen: Set<string>
+): PluginSettingDefinition {
+  const key = readString(raw.key, 'setting.key', 1, 49);
+  if (!SETTING_KEY_PATTERN.test(key)) {
+    throw new Error(`invalid setting key: ${key}`);
+  }
+  if (seen.has(key)) throw new Error(`duplicate setting key: ${key}`);
+  seen.add(key);
+
+  const name = readString(raw.name, `setting.${key}.name`, 1, 100);
+  const description =
+    raw.description === undefined
+      ? undefined
+      : readString(raw.description, `setting.${key}.description`, 0, 300);
+
+  const inferred =
+    raw.type === undefined && typeof raw.default === 'boolean'
+      ? 'boolean'
+      : raw.type;
+
+  switch (inferred) {
+    case 'boolean': {
+      if (typeof raw.default !== 'boolean') {
+        throw new Error(`setting.${key}.default must be a boolean`);
+      }
+      return { key, name, description, type: 'boolean', default: raw.default };
+    }
+    case 'string': {
+      const defaultValue = readString(
+        raw.default,
+        `setting.${key}.default`,
+        0,
+        SETTING_VALUE_MAX
+      );
+      const placeholder =
+        raw.placeholder === undefined
+          ? undefined
+          : readString(
+              raw.placeholder,
+              `setting.${key}.placeholder`,
+              0,
+              100
+            );
+      return {
+        key,
+        name,
+        description,
+        type: 'string',
+        default: defaultValue,
+        ...(placeholder ? { placeholder } : {}),
+      };
+    }
+    case 'number': {
+      if (typeof raw.default !== 'number' || !Number.isFinite(raw.default)) {
+        throw new Error(`setting.${key}.default must be a finite number`);
+      }
+      const min = optionalNumber(raw.min, `setting.${key}.min`);
+      const max = optionalNumber(raw.max, `setting.${key}.max`);
+      const step = optionalNumber(raw.step, `setting.${key}.step`);
+      if (min !== undefined && max !== undefined && min > max) {
+        throw new Error(`setting.${key}.min must not exceed max`);
+      }
+      if (step !== undefined && step <= 0) {
+        throw new Error(`setting.${key}.step must be positive`);
+      }
+      if (min !== undefined && raw.default < min) {
+        throw new Error(`setting.${key}.default is below min`);
+      }
+      if (max !== undefined && raw.default > max) {
+        throw new Error(`setting.${key}.default is above max`);
+      }
+      return {
+        key,
+        name,
+        description,
+        type: 'number',
+        default: raw.default,
+        ...(min !== undefined ? { min } : {}),
+        ...(max !== undefined ? { max } : {}),
+        ...(step !== undefined ? { step } : {}),
+      };
+    }
+    case 'select': {
+      if (!Array.isArray(raw.options) || raw.options.length === 0) {
+        throw new Error(`setting.${key}.options must be a non-empty array`);
+      }
+      if (raw.options.length > 32) {
+        throw new Error(`setting.${key} has too many options`);
+      }
+
+      const options: Array<{ value: string; label: string }> = [];
+      const values = new Set<string>();
+      for (const entry of raw.options) {
+        const option = assertObject(entry, `setting.${key}.option`);
+        const optionValue = readString(
+          option.value,
+          `setting.${key}.option.value`,
+          1,
+          100
+        );
+        if (values.has(optionValue)) {
+          throw new Error(`setting.${key} has duplicate option ${optionValue}`);
+        }
+        values.add(optionValue);
+        options.push({
+          value: optionValue,
+          label: readString(
+            option.label ?? optionValue,
+            `setting.${key}.option.label`,
+            1,
+            100
+          ),
+        });
+      }
+
+      const defaultValue = readString(
+        raw.default,
+        `setting.${key}.default`,
+        1,
+        100
+      );
+      if (!values.has(defaultValue)) {
+        throw new Error(
+          `setting.${key}.default must match one of its options`
+        );
+      }
+
+      return {
+        key,
+        name,
+        description,
+        type: 'select',
+        default: defaultValue,
+        options,
+      };
+    }
+    default:
+      throw new Error(
+        `setting.${key}.type must be boolean, string, number, or select`
+      );
+  }
+}
+
 function parseSettings(value: unknown): PluginSettingDefinition[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw new Error('settings must be an array');
@@ -61,27 +216,7 @@ function parseSettings(value: unknown): PluginSettingDefinition[] | undefined {
   const settings: PluginSettingDefinition[] = [];
 
   for (const entry of value) {
-    const raw = assertObject(entry, 'setting');
-    const key = readString(raw.key, 'setting.key', 1, 49);
-    if (!SETTING_KEY_PATTERN.test(key)) {
-      throw new Error(`invalid setting key: ${key}`);
-    }
-    if (seen.has(key)) throw new Error(`duplicate setting key: ${key}`);
-    seen.add(key);
-
-    if (typeof raw.default !== 'boolean') {
-      throw new Error(`setting.${key}.default must be a boolean`);
-    }
-
-    settings.push({
-      key,
-      name: readString(raw.name, `setting.${key}.name`, 1, 100),
-      description:
-        raw.description === undefined
-          ? undefined
-          : readString(raw.description, `setting.${key}.description`, 0, 300),
-      default: raw.default,
-    });
+    settings.push(parseSetting(assertObject(entry, 'setting'), seen));
   }
 
   return settings.length > 0 ? settings : undefined;

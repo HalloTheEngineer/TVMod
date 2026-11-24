@@ -1,11 +1,49 @@
-export type PluginPermission = 'dom' | 'style' | 'storage';
+export type PluginPermission = 'dom' | 'style' | 'storage' | 'events';
 
-export interface PluginSettingDefinition {
+export type PluginSettingValue = boolean | string | number;
+export type PluginSettings = Record<string, PluginSettingValue>;
+
+interface PluginSettingBase {
   key: string;
   name: string;
   description?: string;
+}
+
+export interface PluginBooleanSetting extends PluginSettingBase {
+  type: 'boolean';
   default: boolean;
 }
+
+export interface PluginStringSetting extends PluginSettingBase {
+  type: 'string';
+  default: string;
+  placeholder?: string;
+}
+
+export interface PluginNumberSetting extends PluginSettingBase {
+  type: 'number';
+  default: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export interface PluginSelectOption {
+  value: string;
+  label: string;
+}
+
+export interface PluginSelectSetting extends PluginSettingBase {
+  type: 'select';
+  default: string;
+  options: PluginSelectOption[];
+}
+
+export type PluginSettingDefinition =
+  | PluginBooleanSetting
+  | PluginStringSetting
+  | PluginNumberSetting
+  | PluginSelectSetting;
 
 export interface ExternalPluginManifest {
   id: string;
@@ -37,7 +75,12 @@ export interface PanelPlugin {
   settings?: PluginSettingDefinition[];
 }
 
-export const ALLOWED_PERMISSIONS: PluginPermission[] = ['dom', 'style', 'storage'];
+export const ALLOWED_PERMISSIONS: PluginPermission[] = [
+  'dom',
+  'style',
+  'storage',
+  'events',
+];
 
 export function isPluginPermission(value: string): value is PluginPermission {
   return (ALLOWED_PERMISSIONS as string[]).includes(value);

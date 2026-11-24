@@ -2,7 +2,7 @@
 set -eu
 
 if [ $# -ne 1 ]; then
-  echo "usage: $0 <version>   (for example: $0 0.11.0)" >&2
+  echo "usage: $0 <version>   (for example: $0 0.12.0)" >&2
   exit 1
 fi
 
