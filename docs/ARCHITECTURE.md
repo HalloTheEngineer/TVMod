@@ -44,7 +44,7 @@ The preload embeds the entire core (esbuild bundle, `electron` external). It:
 - inserts page CSS for promo/declutter selectors;
 - after `DOMContentLoaded`, applies DOM tags, mounts the shadow-DOM plugin modal, and starts a throttled `MutationObserver`.
 
-The boot traps remove offer buttons/offers, set known promo and ad-detection feature flags to `0`, disable AI Copilot flags, and apply Privacy Shield feature flags. When Privacy Shield is enabled, the boot script also wraps `fetch`, `XMLHttpRequest`, and `sendBeacon` to block a curated tracker/ad host list. Paywall, trial, and entitlement flags are deliberately excluded.
+The boot traps remove offer buttons/offers, set known promo and ad-detection feature flags to `0`, disable AI Copilot flags, hide desktop “Analyze markets in TradingView Desktop” upgrade overlays, and apply Privacy Shield feature flags. The upgrade-overlay blocker watches added DOM nodes for the exact desktop-upgrade copy and tags the containing dialog/overlay with `data-tvmod-upgrade`; a DOM fallback also scans modal-like containers. When Privacy Shield is enabled, the boot script also wraps `fetch`, `XMLHttpRequest`, and `sendBeacon` to block a curated tracker/ad host list. Paywall, trial, and entitlement flags are deliberately excluded.
 
 ## Plugin config
 

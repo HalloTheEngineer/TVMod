@@ -300,12 +300,14 @@ test('boot hooks filter offers and promo feature flags', () => {
     fakeWindow.featureToggleState = {
       black_friday_popup: 1,
       broker_side_promotion: 1,
+      enable_prof_popup_free: 1,
       currency_unit_conversion_paywall: 1,
       some_real_feature: 1,
     };
     const flags = fakeWindow.featureToggleState as Record<string, number>;
     assert.equal(flags.black_friday_popup, 0);
     assert.equal(flags.broker_side_promotion, 0);
+    assert.equal(flags.enable_prof_popup_free, 0);
     assert.equal(flags.currency_unit_conversion_paywall, 1);
     assert.equal(flags.some_real_feature, 1);
   } finally {

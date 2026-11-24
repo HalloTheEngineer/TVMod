@@ -4,11 +4,11 @@ Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and 
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.14.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + functional privacy and workflow plugins + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
+> Status: **v0.14.1, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + functional privacy and workflow plugins + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
-- **Adblock** — filters promo offers, charting-ad toasts, upgrade pills, referral/coupon notifications, and ad-detection flags.
+- **Adblock** — filters promo offers, charting-ad toasts, desktop “Upgrade Now” overlays, upgrade pills, referral/coupon notifications, and ad-detection flags.
 - **Privacy Shield** — optional request-level tracker/ad blocking, analytics flag removal, cookie-prompt suppression, and tracking-parameter stripping.
 - **Quick Actions** — hotkeys and a floating menu for Notes, Position Size, fullscreen, and reload.
 - **Keyword Filter** — hide watchlist symbols and news/headline content containing configured keywords.
@@ -93,12 +93,12 @@ To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 ```sh
 cosign verify-blob \
   --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.0 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.14.0` verifies every archive signature and the combined checksum.
+The repo helper `tools/verify-release.sh 0.14.1` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -232,7 +232,7 @@ The gear button opens a larger, categorized plugin modal:
 
 | Plugin | Category | Default | Notes |
 |---|---|---|---|
-| Adblock | Ads & privacy | on | Charting-ad toasts, promo offers, upgrade pills, referral/coupon notifications, ad-detection flags. Reload required. |
+| Adblock | Ads & privacy | on | Charting-ad toasts, desktop Upgrade Now overlays, promo offers, upgrade pills, referral/coupon notifications, ad-detection and prof-popup flags. Reload required. |
 | Privacy Shield | Ads & privacy | off | Blocks known ad/analytics hosts, tracking flags, cookie prompts, and tracking parameters. Reload required. |
 | Disable AI Copilot | Interface | on | Sets `enable_ai_copilot*` feature flags to `0` and hides remaining AI UI. Reload required. |
 | Keyword Filter | Interface | off | Hides matching watchlist symbols and news/headline items. |
@@ -264,6 +264,17 @@ tvmod plugin add-example position-size
 SDK v2 also adds `ctx.onCleanup` and a permissioned plugin-to-plugin event bus (`ctx.events`). Existing v1 plugins and boolean settings remain compatible. See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md) for the manifest and API.
 
 External plugins are embedded into the installed preload at install/add/refresh time. Launcher mode reloads TradingView pages automatically through a token-protected loopback control endpoint. For a patched install, run `tvmod repair --yes` after changing plugins.
+
+### Adblock coverage
+
+Adblock uses several layers:
+
+- Hides charting-ad toast groups and promo notification groups.
+- Hides desktop “Analyze markets in TradingView Desktop” upgrade overlays by exact text and modal/overlay structure, including hashed-class overlays.
+- Hides common upgrade/paywall modal classes when they appear.
+- Disables promo, ad-detection, and `enable_prof_popup_free` feature flags.
+
+The upgrade-overlay matching is text-based so it can survive TradingView class-name changes. It only targets the specific desktop upgrade copy.
 
 ### Privacy Shield
 

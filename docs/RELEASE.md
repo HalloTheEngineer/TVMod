@@ -40,7 +40,7 @@ The macOS and Windows executables are unsigned by Apple/Microsoft. Signing here 
 Install [cosign](https://docs.sigstore.dev/cosign/installation/), download all release assets into one directory, and run from the repository:
 
 ```sh
-./tools/verify-release.sh 0.14.0
+./tools/verify-release.sh 0.14.1
 ```
 
 The helper verifies every `*.tar.gz` and `*.zip` signature, the `SHA256SUMS` signature, and the checksums.
@@ -49,14 +49,14 @@ Or manually for one artifact:
 
 ```sh
 cosign verify-blob \
-  --bundle tvmod-0.14.0-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.0 \
+  --bundle tvmod-0.14.1-linux-x64.tar.gz.sigstore.json \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  tvmod-0.14.0-linux-x64.tar.gz
+  tvmod-0.14.1-linux-x64.tar.gz
 
 cosign verify-blob \
   --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.0 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.14.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   SHA256SUMS
 
@@ -66,7 +66,7 @@ sha256sum -c SHA256SUMS
 GitHub provenance remains available separately:
 
 ```sh
-gh attestation verify tvmod-0.14.0-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
+gh attestation verify tvmod-0.14.1-linux-x64.tar.gz --repo HalloTheEngineer/TVMod
 ```
 
 ## Local cross-builds

@@ -17,7 +17,7 @@ Anyone who can attach to the inspector during the bootstrap window can execute c
 
 ## Mods and remote code
 
-The v0.14.0 core is bundled into the preload. It does not load remote code automatically. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh`/`install` time; explicitly added signed registries are only fetched and installed on user command.
+The v0.14.1 core is bundled into the preload. It does not load remote code automatically. Local plugins are validated and embedded into the installed preload at `tvmod plugin add`/`refresh`/`install` time; explicitly added signed registries are only fetched and installed on user command.
 
 Plugin code runs in the renderer preload context through a capability context. It does not receive Node.js, Electron IPC, or TVMod's main-process APIs. The test probe confirms `require`, `process`, `globalThis.require`, and `globalThis.process` are unavailable inside a plugin. Plugins can still use page APIs such as `fetch`, `WebSocket`, and direct DOM access, so treat third-party plugins as trusted local code and review them before installing.
 
@@ -30,7 +30,7 @@ Capabilities are declared in the manifest:
 
 SDK v2 adds typed boolean/string/number/select settings, `onSettingsChange`, `ctx.onCleanup`, and the event bus. Setting values are validated and clamped against the signed manifest before they reach plugins. Event handlers are isolated, subscriptions are capped at 200 per plugin and removed when the plugin stops, and events never cross renderer, IPC, or network boundaries. Plugins with `events` can observe other plugins in the same page, so do not send secrets through the bus.
 
-A signed plugin registry is available in v0.14.0. Registry indexes and bundles are Ed25519-signed, bundles are SHA-256 checked, and the registry public key is pinned when the registry is added. There is no default registry, auto-update, or revocation. Registry installation still runs local plugin code; review publishers and plugins.
+A signed plugin registry is available in v0.14.1. Registry indexes and bundles are Ed25519-signed, bundles are SHA-256 checked, and the registry public key is pinned when the registry is added. There is no default registry, auto-update, or revocation. Registry installation still runs local plugin code; review publishers and plugins.
 
 The in-app Registry tab uses an IPC bridge to the CLI. Plugin ids, registry names, URLs, and public-key shape are validated before `execFile`/`spawn` runs, no shell is used, and installs still go through signature, checksum, id, and version verification. Public keys are capped at 16 KiB and passed over stdin; private keys are rejected. The bridge exists only in launcher mode.
 

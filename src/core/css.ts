@@ -1,7 +1,17 @@
 export const PAGE_CSS = `
-html[data-tvmod-adblock="1"] [class*="desktopUpgrade-"],
-html[data-tvmod-adblock="1"] [class*="mobileUpgrade-"],
-html[data-tvmod-adblock="1"] [data-tvmod-promo="1"] {
+html[data-tvmod-adblock="1"] [class*="desktopUpgrade"],
+html[data-tvmod-adblock="1"] [class*="desktop-upgrade"],
+html[data-tvmod-adblock="1"] [class*="mobileUpgrade"],
+html[data-tvmod-adblock="1"] [class*="upgrade-modal"],
+html[data-tvmod-adblock="1"] [class*="upgradeModal"],
+html[data-tvmod-adblock="1"] [class*="paywall-modal"],
+html[data-tvmod-adblock="1"] [class*="paywallModal"],
+html[data-tvmod-adblock="1"] [class*="go-pro-modal"],
+html[data-tvmod-adblock="1"] [data-name*="upgrade"],
+html[data-tvmod-adblock="1"] [data-name*="paywall"],
+html[data-tvmod-adblock="1"] [data-name*="go-pro"],
+html[data-tvmod-adblock="1"] [data-tvmod-promo="1"],
+[data-tvmod-upgrade="1"] {
   display: none !important;
 }
 

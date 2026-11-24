@@ -6,7 +6,10 @@ import {
 import { stripTrackingParams } from '../lib/privacy.js';
 
 const HIDDEN_ATTR = 'data-tvmod-promo';
+const UPGRADE_ATTR = 'data-tvmod-upgrade';
 const PRIVACY_ATTR = 'data-tvmod-cookie';
+const UPGRADE_TEXT =
+  /Analyze markets in TradingView Desktop|full power of TradingView Desktop|Link symbols across tabs/i;
 const SIDEBAR_FORCED_KEY = 'tvmod.sidebar.forced';
 
 let forcedSidebar = readForcedSidebar();
@@ -111,6 +114,84 @@ function findPromoContainer(element: Element): Element | null {
   return null;
 }
 
+function findUpgradeTarget(element: Element): Element {
+  let node: Element | null = element;
+  let target: Element = element;
+  let overlay: Element | null = null;
+
+  for (let depth = 0; depth < 12 && node; depth += 1) {
+    if (node === document.body || node === document.documentElement) break;
+    const className = typeof node.className === 'string' ? node.className : '';
+    const role = node.getAttribute('role');
+    const ariaModal = node.getAttribute('aria-modal');
+
+    if (
+      role === 'dialog' ||
+      role === 'alertdialog' ||
+      ariaModal === 'true' ||
+      /modal|overlay|paywall|upgrade|backdrop/i.test(className)
+    ) {
+      target = node;
+    }
+
+    try {
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      const textLength = (node.textContent ?? '').length;
+      const safeOverlay =
+        !/layout|chart|app|workspace/i.test(className) &&
+        textLength <= 4000 &&
+        node.childElementCount <= 12;
+      if (
+        safeOverlay &&
+        (style.position === 'fixed' || style.position === 'absolute') &&
+        rect.width >= window.innerWidth * 0.6 &&
+        rect.height >= window.innerHeight * 0.5
+      ) {
+        overlay = node;
+      }
+    } catch {
+      // Ignore layout failures.
+    }
+
+    node = node.parentElement;
+  }
+
+  return overlay ?? target;
+}
+
+function tagUpgradePanels(): void {
+  const candidates = document.querySelectorAll(
+    [
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      '[aria-modal="true"]',
+      '[class*="modal"]',
+      '[class*="Modal"]',
+      '[class*="overlay"]',
+      '[class*="Overlay"]',
+      '[class*="paywall"]',
+      '[class*="Paywall"]',
+      '[class*="upgrade"]',
+      '[class*="Upgrade"]',
+    ].join(', ')
+  );
+
+  for (const element of candidates) {
+    if (element.closest(`[${UPGRADE_ATTR}]`)) continue;
+    const text = element.textContent ?? '';
+    if (text.length > 4000) continue;
+    if (!UPGRADE_TEXT.test(text)) continue;
+    findUpgradeTarget(element).setAttribute(UPGRADE_ATTR, '1');
+  }
+}
+
+function clearUpgradePanels(): void {
+  for (const element of document.querySelectorAll(`[${UPGRADE_ATTR}]`)) {
+    element.removeAttribute(UPGRADE_ATTR);
+  }
+}
+
 function cookieContainer(element: Element): Element | null {
   return (
     element.closest(
@@ -182,6 +263,10 @@ export function applyDom(config: TvmodConfig): void {
       const container = findPromoContainer(element);
       if (container) tagPromo(container);
     }
+
+    tagUpgradePanels();
+  } else {
+    clearUpgradePanels();
   }
 
   if (privacy) {
