@@ -4,6 +4,7 @@ import { installBootHooks } from '../src/core/boot.js';
 import {
   CONFIG_KEY,
   LEGACY_SETTINGS_KEY,
+  OBSOLETE_PLUGIN_IDS,
   defaultConfig,
   getPluginSettings,
   isPluginEnabled,
@@ -69,6 +70,27 @@ test('normalizeConfig merges external plugin settings with defaults', () => {
 
   assert.equal(isPluginEnabled(config, 'external'), true);
   assert.equal(config.plugins.external?.settings?.foo, false);
+});
+
+test('normalizeConfig removes obsolete visual plugin states', () => {
+  const config = normalizeConfig({
+    version: 2,
+    plugins: {
+      adblock: { enabled: true },
+      'hide-community-hub': { enabled: true },
+      'hide-sidebar': { enabled: true },
+      'hide-right-toolbar': { enabled: true },
+      'hide-watchlist': { enabled: true },
+      'hide-details': { enabled: true },
+      'hide-bottom-controls': { enabled: true },
+      'hide-toolbar-extras': { enabled: true },
+      'hide-trade-buttons': { enabled: true },
+    },
+  });
+
+  for (const id of OBSOLETE_PLUGIN_IDS) {
+    assert.equal(config.plugins[id], undefined);
+  }
 });
 
 test('withPluginSetting preserves the enabled state', () => {
@@ -201,8 +223,8 @@ test('legacy flat settings migrate to plugin state', () => {
 
   assert.equal(isPluginEnabled(config, 'adblock'), false);
   assert.equal(isPluginEnabled(config, 'hide-ai-copilot'), false);
-  assert.equal(isPluginEnabled(config, 'hide-community-hub'), false);
-  assert.equal(isPluginEnabled(config, 'hide-sidebar'), true);
+  assert.equal(config.plugins['hide-community-hub'], undefined);
+  assert.equal(config.plugins['hide-sidebar'], undefined);
 });
 
 test('loadConfig migrates the legacy key and writes the new key', () => {
@@ -226,8 +248,8 @@ test('loadConfig migrates the legacy key and writes the new key', () => {
 });
 
 test('withPluginEnabled updates one plugin without losing others', () => {
-  const config = withPluginEnabled(defaultConfig(), 'hide-sidebar', true);
-  assert.equal(isPluginEnabled(config, 'hide-sidebar'), true);
+  const config = withPluginEnabled(defaultConfig(), 'focus-mode', true);
+  assert.equal(isPluginEnabled(config, 'focus-mode'), true);
   assert.equal(isPluginEnabled(config, 'adblock'), true);
 });
 
@@ -257,7 +279,10 @@ test('boot hooks filter offers and promo feature flags', () => {
   (globalThis as Record<string, unknown>).window = fakeWindow;
 
   try {
-    installBootHooks({ adblock: true }, { version: 'test', at: 0 });
+    installBootHooks(
+      { adblock: true, disableAi: false, privacy: false, privacyHosts: [] },
+      { version: 'test', at: 0 }
+    );
 
     fakeWindow.initData = {
       offerButtonInfo: { title: 'Black Friday' },
@@ -289,5 +314,65 @@ test('boot hooks filter offers and promo feature flags', () => {
       clearInterval(interval as ReturnType<typeof setInterval>);
     }
     delete (globalThis as Record<string, unknown>).window;
+  }
+});
+
+test('boot hooks disable AI, tracking flags, and privacy hosts', async () => {
+  const fakeWindow: Record<string, unknown> = {
+    fetch: async (input: unknown) => ({
+      status: 200,
+      url: String(input),
+    }),
+  };
+  const globals = globalThis as Record<string, unknown>;
+  globals.window = fakeWindow;
+  globals.location = { href: 'https://www.tradingview.com/chart/' };
+
+  try {
+    installBootHooks(
+      {
+        adblock: false,
+        disableAi: true,
+        privacy: true,
+        privacyHosts: ['google-analytics.com'],
+      },
+      { version: 'test', at: 0 }
+    );
+
+    fakeWindow.featureToggleState = {
+      enable_ai_copilot: 1,
+      enable_ai_copilot_chart_range: 1,
+      enable_ai_support_entrypoint: 1,
+      'adwords-analytics': 1,
+      trading_general_events_ga_tracking: 1,
+      trading_general_events_snowplow_tracking: 1,
+      some_real_feature: 1,
+    };
+    const flags = fakeWindow.featureToggleState as Record<string, number>;
+    assert.equal(flags.enable_ai_copilot, 0);
+    assert.equal(flags.enable_ai_copilot_chart_range, 0);
+    assert.equal(flags.enable_ai_support_entrypoint, 1);
+    assert.equal(flags['adwords-analytics'], 0);
+    assert.equal(flags.trading_general_events_ga_tracking, 0);
+    assert.equal(flags.trading_general_events_snowplow_tracking, 0);
+    assert.equal(flags.some_real_feature, 1);
+
+    const blocked = await (
+      fakeWindow.fetch as (input: string) => Promise<{ status: number }>
+    )('https://www.google-analytics.com/collect');
+    assert.equal(blocked.status, 204);
+    assert.ok(Number(fakeWindow.__TVMOD_PRIVACY_BLOCKED__) > 0);
+
+    const allowed = await (
+      fakeWindow.fetch as (input: string) => Promise<{ status: number }>
+    )('https://data.tradingview.com/chart');
+    assert.equal(allowed.status, 200);
+  } finally {
+    const interval = fakeWindow.__TVMOD_BOOT_INTERVAL__;
+    if (interval) {
+      clearInterval(interval as ReturnType<typeof setInterval>);
+    }
+    delete globals.window;
+    delete globals.location;
   }
 });

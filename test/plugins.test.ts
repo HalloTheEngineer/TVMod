@@ -5,11 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { readEmbeddedPlugins, toPanelPlugin } from '../src/core/embedded-plugins.js';
 import { composePreload, readPluginDirectory, validateManifest } from '../src/lib/plugin-files.js';
+import { PROMO_NAME_SELECTOR } from '../src/core/css.js';
 import { PLUGINS, getPlugin } from '../src/core/plugins.js';
 
 const exampleDir = path.resolve('examples/plugins/hello-world');
 
-test('builtin plugins are unique, categorized, and new cleanups default off', () => {
+test('builtin plugins are unique, categorized, and functional defaults are off', () => {
   const ids = new Set<string>();
   for (const plugin of PLUGINS) {
     assert.ok(plugin.category);
@@ -17,13 +18,23 @@ test('builtin plugins are unique, categorized, and new cleanups default off', ()
     ids.add(plugin.id);
   }
 
+  assert.deepEqual(
+    PLUGINS.map((plugin) => plugin.id),
+    [
+      'adblock',
+      'privacy-shield',
+      'hide-ai-copilot',
+      'keyword-filter',
+      'quick-actions',
+      'focus-mode',
+      'reduce-motion',
+    ]
+  );
+
   for (const id of [
-    'hide-right-toolbar',
-    'hide-watchlist',
-    'hide-details',
-    'hide-bottom-controls',
-    'hide-toolbar-extras',
-    'hide-trade-buttons',
+    'privacy-shield',
+    'keyword-filter',
+    'quick-actions',
     'focus-mode',
     'reduce-motion',
   ]) {
@@ -32,7 +43,9 @@ test('builtin plugins are unique, categorized, and new cleanups default off', ()
     assert.equal(plugin.defaultEnabled, false);
   }
 
+  assert.match(PROMO_NAME_SELECTOR, /charting-ad/);
   assert.equal(getPlugin('adblock')?.category, 'ads');
+  assert.equal(getPlugin('privacy-shield')?.category, 'ads');
   assert.equal(getPlugin('reduce-motion')?.category, 'accessibility');
 });
 

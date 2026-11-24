@@ -16,7 +16,7 @@ export const PLUGIN_CATEGORY_ORDER: PluginCategory[] = [
 ];
 
 export const PLUGIN_CATEGORY_LABELS: Record<PluginCategory, string> = {
-  ads: 'Ads & promotions',
+  ads: 'Ads & privacy',
   interface: 'Interface',
   accessibility: 'Accessibility',
   tools: 'Tools',

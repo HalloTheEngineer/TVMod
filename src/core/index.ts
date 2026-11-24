@@ -10,10 +10,13 @@ import {
 import { PAGE_CSS } from './css.js';
 import { applyDom, startDomObserver } from './dom.js';
 import { readEmbeddedPlugins, toPanelPlugin } from './embedded-plugins.js';
+import { applyKeywordFilter } from './keyword-filter.js';
 import type { Host } from './host.js';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { PluginHost } from './plugin-host.js';
 import { PLUGINS } from './plugins.js';
+import { applyQuickActions } from './quick-actions.js';
+import { PRIVACY_HOSTS } from '../lib/privacy.js';
 
 let started = false;
 
@@ -46,8 +49,12 @@ export function start(version: string, host: Host): void {
     console.error('[tvmod] failed to insert page CSS', error);
   }
 
+  const privacyEnabled = isPluginEnabled(config, 'privacy-shield');
   const bootScript = `(${installBootHooks.toString()})(${JSON.stringify({
     adblock: isPluginEnabled(config, 'adblock'),
+    disableAi: isPluginEnabled(config, 'hide-ai-copilot'),
+    privacy: privacyEnabled,
+    privacyHosts: privacyEnabled ? PRIVACY_HOSTS : [],
   })}, ${JSON.stringify({ version, at: Date.now() })});`;
 
   void Promise.resolve(host.executeJavaScript(bootScript)).catch((error) => {
@@ -61,8 +68,14 @@ export function start(version: string, host: Host): void {
     void pluginHost.sync().then(() => panel?.refresh());
   };
 
-  const onReady = (): void => {
+  const applyFeatures = (): void => {
     applyDom(config);
+    applyKeywordFilter(config);
+    applyQuickActions(config);
+  };
+
+  const onReady = (): void => {
+    applyFeatures();
 
     try {
       panel = mountPanel({
@@ -72,7 +85,7 @@ export function start(version: string, host: Host): void {
         setConfig: (next) => {
           config = next;
           saveConfig(config);
-          applyDom(config);
+          applyFeatures();
           syncPlugins();
           panel?.ensureMounted();
         },
@@ -86,7 +99,10 @@ export function start(version: string, host: Host): void {
 
     startDomObserver(
       () => config,
-      () => panel?.ensureMounted()
+      () => {
+        applyKeywordFilter(config);
+        panel?.ensureMounted();
+      }
     );
 
     syncPlugins();
@@ -94,7 +110,7 @@ export function start(version: string, host: Host): void {
     window.addEventListener('storage', (event) => {
       if (event.key !== CONFIG_KEY) return;
       config = loadConfig(undefined, plugins);
-      applyDom(config);
+      applyFeatures();
       syncPlugins();
       panel?.refresh();
     });

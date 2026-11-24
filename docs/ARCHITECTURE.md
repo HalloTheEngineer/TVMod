@@ -44,16 +44,19 @@ The preload embeds the entire core (esbuild bundle, `electron` external). It:
 - inserts page CSS for promo/declutter selectors;
 - after `DOMContentLoaded`, applies DOM tags, mounts the shadow-DOM plugin modal, and starts a throttled `MutationObserver`.
 
-The boot traps remove offer buttons/offers and set known promo feature flags to `0` when the **Adblock** plugin is enabled. Paywall, trial, and entitlement flags are deliberately excluded.
+The boot traps remove offer buttons/offers, set known promo and ad-detection feature flags to `0`, disable AI Copilot flags, and apply Privacy Shield feature flags. When Privacy Shield is enabled, the boot script also wraps `fetch`, `XMLHttpRequest`, and `sendBeacon` to block a curated tracker/ad host list. Paywall, trial, and entitlement flags are deliberately excluded.
 
 ## Plugin config
 
 Plugins are declared in `src/core/plugins.ts`:
 
 - `adblock` (default on, reload required for boot filters)
-- `hide-ai-copilot` (default on)
-- `hide-community-hub` (default on)
-- `hide-sidebar` (default off)
+- `privacy-shield` (default off, reload required)
+- `hide-ai-copilot` (default on, feature-flag disable, reload required)
+- `keyword-filter` (default off, typed keywords/scope)
+- `focus-mode` (default off)
+- `reduce-motion` (default off)
+- `quick-actions` (default off, typed button/hotkey settings)
 
 State is stored in `localStorage` under `tvmod.config.v2`:
 
@@ -62,9 +65,12 @@ State is stored in `localStorage` under `tvmod.config.v2`:
   "version": 2,
   "plugins": {
     "adblock": { "enabled": true },
+    "privacy-shield": { "enabled": false },
     "hide-ai-copilot": { "enabled": true },
-    "hide-community-hub": { "enabled": true },
-    "hide-sidebar": { "enabled": false }
+    "keyword-filter": { "enabled": false, "settings": { "keywords": "", "scope": "all" } },
+    "focus-mode": { "enabled": false },
+    "reduce-motion": { "enabled": false },
+    "quick-actions": { "enabled": false, "settings": { "showButton": true, "enableHotkeys": true } }
   }
 }
 ```
@@ -89,7 +95,9 @@ SDK v2 settings are normalized against validated manifest definitions before the
 
 Plugin code is executed with `new Function(...)` in the preload context with `require` and `process` shadowed as `undefined`. It has no Node.js or Electron IPC access, but it can still access page APIs such as `fetch` and the DOM. Treat local plugins as trusted code.
 
-Sidebar visibility uses TradingView’s native right-toolbar toggle so the chart reflows correctly. Focus Mode collapses the sidebar natively, hides the right toolbar and bottom controls, and expands the chart container. Watchlist/details toggles hide one widget and let the other fill the sidebar; hiding both collapses the sidebar. The bottom-control and focus states expand the chart container to the available height.
+Focus Mode collapses the sidebar using TradingView’s native right-toolbar toggle, hides the right toolbar and bottom controls, and expands the chart container. Visual-only sidebar, toolbar, watchlist, details, trade-button, and bottom-control plugins were removed because TradingView provides equivalent native controls; stale config states are dropped during normalization.
+
+`keyword-filter` tags matching watchlist rows and news/headline cards with `data-tvmod-filtered` and clears tags when disabled. `quick-actions` mounts a small isolated action menu and keyboard handler, clicking existing Notes/Calculator controls rather than duplicating their UI. Privacy Shield DOM work hides cookie toast groups and rewrites tracking parameters on clicked links.
 
 Bundled examples are installed by `plugin add-example`, which resolves the release `examples/plugins` directory or a source checkout before using the normal plugin install path.
 

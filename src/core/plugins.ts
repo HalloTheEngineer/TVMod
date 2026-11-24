@@ -5,86 +5,85 @@ export const PLUGINS: PanelPlugin[] = [
     id: 'adblock',
     name: 'Adblock',
     description:
-      'Suppress promo offers, upgrade pills, referral/coupon toasts, and Black Friday/Cyber Monday flags.',
+      'Suppress charting ads, promo offers, upgrade pills, referral/coupon toasts, and Black Friday/Cyber Monday flags.',
     category: 'ads',
     defaultEnabled: true,
     requiresReload: true,
   },
   {
+    id: 'privacy-shield',
+    name: 'Privacy Shield',
+    description:
+      'Block known analytics/ad hosts, tracking feature flags, cookie prompts, and tracking parameters. Reload required.',
+    category: 'ads',
+    defaultEnabled: false,
+    requiresReload: true,
+  },
+  {
     id: 'hide-ai-copilot',
-    name: 'Hide AI Copilot',
-    description: 'Remove the AI Copilot button and area from the chart.',
+    name: 'Disable AI Copilot',
+    description:
+      'Disable AI Copilot feature flags at boot and hide its remaining UI. Reload required.',
     category: 'interface',
     defaultEnabled: true,
+    requiresReload: true,
   },
   {
-    id: 'hide-community-hub',
-    name: 'Hide Community Hub',
-    description: 'Remove the Community Hub button from the right toolbar.',
-    category: 'interface',
-    defaultEnabled: true,
-  },
-  {
-    id: 'hide-sidebar',
-    name: 'Hide Sidebar',
+    id: 'keyword-filter',
+    name: 'Keyword Filter',
     description:
-      'Hide the entire right watchlist/details sidebar and give the chart more room.',
+      'Hide watchlist symbols and news/headline content containing configured keywords.',
     category: 'interface',
     defaultEnabled: false,
+    settings: [
+      {
+        key: 'keywords',
+        name: 'Keywords',
+        description: 'Comma-separated terms, case-insensitive. Up to 20.',
+        type: 'string',
+        default: '',
+        placeholder: 'tesla, nvidia, sponsored',
+      },
+      {
+        key: 'scope',
+        name: 'Filter scope',
+        type: 'select',
+        default: 'all',
+        options: [
+          { value: 'all', label: 'Watchlist and news' },
+          { value: 'watchlist', label: 'Watchlist only' },
+          { value: 'news', label: 'News only' },
+        ],
+      },
+    ],
   },
   {
-    id: 'hide-right-toolbar',
-    name: 'Hide Right Toolbar',
+    id: 'quick-actions',
+    name: 'Quick Actions',
     description:
-      'Remove the entire right button column: alerts, object tree, screeners, Pine, calendar, notifications, chats, and help.',
-    category: 'interface',
+      'Hotkeys and an optional floating menu for Notes, Position Size, fullscreen, and reload.',
+    category: 'tools',
     defaultEnabled: false,
-  },
-  {
-    id: 'hide-watchlist',
-    name: 'Hide Watchlist',
-    description:
-      'Hide the watchlist widget while keeping the instrument details panel available.',
-    category: 'interface',
-    defaultEnabled: false,
-  },
-  {
-    id: 'hide-details',
-    name: 'Hide Details Panel',
-    description:
-      'Hide the instrument details widget while keeping the watchlist available.',
-    category: 'interface',
-    defaultEnabled: false,
-  },
-  {
-    id: 'hide-bottom-controls',
-    name: 'Hide Bottom Controls',
-    description:
-      'Hide the bottom timeframe and date-range control bar for a cleaner chart.',
-    category: 'interface',
-    defaultEnabled: false,
-  },
-  {
-    id: 'hide-toolbar-extras',
-    name: 'Hide Toolbar Extras',
-    description:
-      'Hide screeners, Pine Editor, Pine Screener, calendars, notifications, chats, help, and the object tree button.',
-    category: 'interface',
-    defaultEnabled: false,
-  },
-  {
-    id: 'hide-trade-buttons',
-    name: 'Hide Trade Buttons',
-    description:
-      'Hide buy/sell and broker buttons. Account entitlements and trading permissions are unchanged.',
-    category: 'interface',
-    defaultEnabled: false,
+    settings: [
+      {
+        key: 'showButton',
+        name: 'Show actions button',
+        type: 'boolean',
+        default: true,
+      },
+      {
+        key: 'enableHotkeys',
+        name: 'Enable hotkeys',
+        type: 'boolean',
+        default: true,
+      },
+    ],
   },
   {
     id: 'focus-mode',
     name: 'Focus Mode',
     description:
-      'Hide the right toolbar, sidebar, and bottom controls. Press Ctrl+Shift+M to reopen TVMod settings.',
+      'Collapse the sidebar and hide the right toolbar and bottom controls. Press Ctrl+Shift+M to reopen TVMod settings.',
     category: 'interface',
     defaultEnabled: false,
   },

@@ -3,9 +3,16 @@ import {
   PROMO_CLASS_SELECTOR,
   PROMO_NAME_SELECTOR,
 } from './css.js';
+import { stripTrackingParams } from '../lib/privacy.js';
 
 const HIDDEN_ATTR = 'data-tvmod-promo';
+const PRIVACY_ATTR = 'data-tvmod-cookie';
 const SIDEBAR_FORCED_KEY = 'tvmod.sidebar.forced';
+
+let forcedSidebar = readForcedSidebar();
+let sidebarActionAt = 0;
+let privacyEnabled = false;
+let trackingHandlerInstalled = false;
 
 function readForcedSidebar(): boolean {
   try {
@@ -27,9 +34,6 @@ function setForcedSidebar(value: boolean): void {
     // localStorage may be unavailable.
   }
 }
-
-let forcedSidebar = readForcedSidebar();
-let sidebarActionAt = 0;
 
 function scheduleSidebarStateRefresh(requestedCollapsed: boolean): void {
   window.setTimeout(() => {
@@ -58,7 +62,6 @@ function updateSidebarLayout(root: HTMLElement, collapsed: boolean): void {
 
   const base = document.querySelector<HTMLElement>('[data-name="base"]');
   if (!base) return;
-
   if (Date.now() - sidebarActionAt < 500) return;
 
   if (collapsed && !isCollapsed) {
@@ -67,9 +70,6 @@ function updateSidebarLayout(root: HTMLElement, collapsed: boolean): void {
     sidebarActionAt = Date.now();
     scheduleSidebarStateRefresh(collapsed);
   } else if (!collapsed && isCollapsed && forcedSidebar) {
-    // Keep forcedSidebar until the sidebar is actually expanded. The toggle
-    // can be hidden by Hide Right Toolbar/Focus Mode, in which case the click
-    // is a no-op until those plugins are disabled.
     base.click();
     sidebarActionAt = Date.now();
     scheduleSidebarStateRefresh(collapsed);
@@ -81,6 +81,12 @@ function updateSidebarLayout(root: HTMLElement, collapsed: boolean): void {
 function tagPromo(element: Element): void {
   if (!element.hasAttribute(HIDDEN_ATTR)) {
     element.setAttribute(HIDDEN_ATTR, '1');
+  }
+}
+
+function tagPrivacy(element: Element | null): void {
+  if (element && !element.hasAttribute(PRIVACY_ATTR)) {
+    element.setAttribute(PRIVACY_ATTR, '1');
   }
 }
 
@@ -105,66 +111,85 @@ function findPromoContainer(element: Element): Element | null {
   return null;
 }
 
+function cookieContainer(element: Element): Element | null {
+  return (
+    element.closest(
+      '[class*="toastGroup"], [class*="toast-group"], [class*="cookieBanner"], [class*="cookie-banner"]'
+    ) ??
+    findPromoContainer(element) ??
+    element.parentElement
+  );
+}
+
+function installTrackingHandler(): void {
+  if (trackingHandlerInstalled) return;
+  trackingHandlerInstalled = true;
+
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (!privacyEnabled) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest<HTMLAnchorElement>('a[href]');
+      if (!anchor) return;
+
+      try {
+        const url = new URL(anchor.href, location.href);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+        const next = stripTrackingParams(url);
+        if (next !== url.toString() && next !== anchor.href) {
+          anchor.href = next;
+        }
+      } catch {
+        // Ignore malformed links.
+      }
+    },
+    true
+  );
+}
+
 export function applyDom(config: TvmodConfig): void {
   const root = document.documentElement;
   if (!root) return;
 
-  const hideSidebar = isPluginEnabled(config, 'hide-sidebar');
-  const hideRightToolbar = isPluginEnabled(config, 'hide-right-toolbar');
-  const hideWatchlist = isPluginEnabled(config, 'hide-watchlist');
-  const hideDetails = isPluginEnabled(config, 'hide-details');
-  const hideBottomControls = isPluginEnabled(config, 'hide-bottom-controls');
-  const focusMode = isPluginEnabled(config, 'focus-mode');
-
   const adblock = isPluginEnabled(config, 'adblock');
+  const privacy = isPluginEnabled(config, 'privacy-shield');
+  const focusMode = isPluginEnabled(config, 'focus-mode');
+  const disableAi = isPluginEnabled(config, 'hide-ai-copilot');
+  const reduceMotion = isPluginEnabled(config, 'reduce-motion');
+
+  privacyEnabled = privacy;
+  installTrackingHandler();
+
   root.dataset.tvmodAdblock = adblock ? '1' : '0';
-  root.dataset.tvmodHideAi = isPluginEnabled(config, 'hide-ai-copilot') ? '1' : '0';
-  root.dataset.tvmodHideCommunity = isPluginEnabled(config, 'hide-community-hub')
-    ? '1'
-    : '0';
-  root.dataset.tvmodHideSidebar = hideSidebar ? '1' : '0';
-  // Keep the native sidebar toggle clickable while resolving sidebar state.
-  root.dataset.tvmodHideRightToolbar = '0';
+  root.dataset.tvmodPrivacy = privacy ? '1' : '0';
+  root.dataset.tvmodHideAi = disableAi ? '1' : '0';
+  root.dataset.tvmodReduceMotion = reduceMotion ? '1' : '0';
+
+  // Keep the native sidebar toggle clickable while resolving Focus Mode.
   root.dataset.tvmodFocus = '0';
-  root.dataset.tvmodHideWatchlist = hideWatchlist ? '1' : '0';
-  root.dataset.tvmodHideDetails = hideDetails ? '1' : '0';
-  root.dataset.tvmodHideBottomControls = hideBottomControls ? '1' : '0';
-  root.dataset.tvmodHideToolbarExtras = isPluginEnabled(
-    config,
-    'hide-toolbar-extras'
-  )
-    ? '1'
-    : '0';
-  root.dataset.tvmodHideTradeButtons = isPluginEnabled(
-    config,
-    'hide-trade-buttons'
-  )
-    ? '1'
-    : '0';
-  root.dataset.tvmodReduceMotion = isPluginEnabled(config, 'reduce-motion')
-    ? '1'
-    : '0';
-
-  updateSidebarLayout(
-    root,
-    hideSidebar ||
-      focusMode ||
-      (hideWatchlist && hideDetails)
-  );
-
-  root.dataset.tvmodHideRightToolbar = hideRightToolbar ? '1' : '0';
+  updateSidebarLayout(root, focusMode);
   root.dataset.tvmodFocus = focusMode ? '1' : '0';
 
-  if (!adblock) return;
+  if (adblock) {
+    for (const element of document.querySelectorAll(PROMO_CLASS_SELECTOR)) {
+      tagPromo(element);
+    }
 
-  for (const element of document.querySelectorAll(PROMO_CLASS_SELECTOR)) {
-    tagPromo(element);
+    for (const element of document.querySelectorAll(PROMO_NAME_SELECTOR)) {
+      tagPromo(element);
+      const container = findPromoContainer(element);
+      if (container) tagPromo(container);
+    }
   }
 
-  for (const element of document.querySelectorAll(PROMO_NAME_SELECTOR)) {
-    tagPromo(element);
-    const container = findPromoContainer(element);
-    if (container) tagPromo(container);
+  if (privacy) {
+    for (const element of document.querySelectorAll(
+      '[data-name*="cookies"], [class*="cookieBanner"], [class*="cookie-banner"]'
+    )) {
+      tagPrivacy(cookieContainer(element));
+    }
   }
 }
 

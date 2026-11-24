@@ -5,6 +5,9 @@
  */
 export interface BootSettings {
   adblock: boolean;
+  disableAi: boolean;
+  privacy: boolean;
+  privacyHosts: string[];
 }
 
 export interface BootMeta {
@@ -38,9 +41,14 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
 
   const isPromoFlag = (key: string): boolean => promoFlagPattern.test(key);
 
+  const aiFlagPattern = /^enable_ai_copilot/i;
+  const privacyFlagPattern =
+    /^(adwords-analytics|trading_general_events_ga_tracking|trading_general_events_snowplow_tracking)$/i;
+
   const lockedObjects = new WeakSet<object>();
 
   const lockAvailableOffers = (value: unknown): unknown => {
+    if (!settings.adblock) return value;
     if (!value || typeof value !== 'object') return value;
     const user = value as Record<string, unknown>;
 
@@ -131,13 +139,22 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
     return value;
   };
 
+  const shouldDisableFlag = (key: string): boolean =>
+    (settings.adblock &&
+      (isPromoFlag(key) || key === 'enable_ad_block_detect')) ||
+    (settings.disableAi && aiFlagPattern.test(key)) ||
+    (settings.privacy &&
+      (privacyFlagPattern.test(key) || key === 'enable_ad_block_detect'));
+
   const filterFeatureToggles = (value: unknown): unknown => {
-    if (!settings.adblock) return value;
+    if (!settings.adblock && !settings.disableAi && !settings.privacy) {
+      return value;
+    }
     if (!value || typeof value !== 'object') return value;
     const toggles = value as Record<string, unknown>;
 
     for (const key of Object.keys(toggles)) {
-      if (!isPromoFlag(key)) continue;
+      if (!shouldDisableFlag(key)) continue;
       const descriptor = Object.getOwnPropertyDescriptor(toggles, key);
       if (descriptor?.get) continue;
 
@@ -163,6 +180,109 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
 
     return value;
   };
+
+  if (settings.privacy) {
+    try {
+      const blockedHosts = settings.privacyHosts;
+
+      const blocked = (input: unknown): boolean => {
+        try {
+          const raw =
+            typeof input === 'string'
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : (input as { url?: unknown })?.url;
+          if (typeof raw !== 'string') return false;
+          const parsed = new URL(raw, location.href);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return false;
+          }
+          const host = parsed.hostname.toLowerCase();
+          return blockedHosts.some(
+            (entry) => host === entry || host.endsWith('.' + entry)
+          );
+        } catch {
+          return false;
+        }
+      };
+
+      const countBlocked = (): void => {
+        const current = Number(w.__TVMOD_PRIVACY_BLOCKED__ ?? 0);
+        w.__TVMOD_PRIVACY_BLOCKED__ = current + 1;
+      };
+
+      const nativeFetch = w.fetch;
+      if (typeof nativeFetch === 'function') {
+        w.fetch = function (
+          this: unknown,
+          input: RequestInfo | URL,
+          init?: RequestInit
+        ): Promise<Response> {
+          if (blocked(input)) {
+            countBlocked();
+            return Promise.resolve(
+              new Response(null, { status: 204, statusText: 'No Content' })
+            );
+          }
+          return (nativeFetch as typeof fetch).call(this, input, init);
+        } as typeof fetch;
+      }
+
+      const NativeXhr = w.XMLHttpRequest as typeof XMLHttpRequest | undefined;
+      if (NativeXhr?.prototype) {
+        const originalOpen = NativeXhr.prototype.open;
+        const originalSend = NativeXhr.prototype.send;
+
+        NativeXhr.prototype.open = function (
+          this: XMLHttpRequest,
+          method: string,
+          url: string | URL,
+          async?: boolean,
+          username?: string | null,
+          password?: string | null
+        ): void {
+          const xhr = this as XMLHttpRequest & { __tvmodBlocked?: boolean };
+          if (blocked(url)) {
+            xhr.__tvmodBlocked = true;
+            countBlocked();
+            return;
+          }
+          xhr.__tvmodBlocked = false;
+          return originalOpen.call(
+            this,
+            method,
+            url,
+            async ?? true,
+            username ?? null,
+            password ?? null
+          );
+        } as typeof XMLHttpRequest.prototype.open;
+
+        NativeXhr.prototype.send = function (
+          this: XMLHttpRequest,
+          body?: Document | XMLHttpRequestBodyInit | null
+        ): void {
+          const xhr = this as XMLHttpRequest & { __tvmodBlocked?: boolean };
+          if (xhr.__tvmodBlocked) return;
+          return originalSend.call(this, body);
+        };
+      }
+
+      const beacon = navigator.sendBeacon?.bind(navigator);
+      if (beacon) {
+        navigator.sendBeacon = (url: string | URL, data?: BodyInit | null): boolean => {
+          if (blocked(url)) {
+            countBlocked();
+            return false;
+          }
+          return beacon(url, data);
+        };
+      }
+    } catch (error) {
+      w.__TVMOD_PRIVACY_ERROR__ = String(error);
+    }
+  }
 
   const errors: string[] = [];
 
@@ -199,7 +319,7 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
     w.__TVMOD_TRAP_ERRORS__ = errors;
   }
 
-  if (settings.adblock) {
+  if (settings.adblock || settings.disableAi || settings.privacy) {
     w.__TVMOD_BOOT_INTERVAL__ = setInterval(() => {
       try {
         if (w.initData) filterInitData(w.initData);

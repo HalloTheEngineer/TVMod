@@ -24,6 +24,17 @@ export interface StorageLike {
 export const CONFIG_KEY = 'tvmod.config.v2';
 export const LEGACY_SETTINGS_KEY = 'tvmod.settings.v1';
 
+export const OBSOLETE_PLUGIN_IDS = new Set([
+  'hide-community-hub',
+  'hide-sidebar',
+  'hide-right-toolbar',
+  'hide-watchlist',
+  'hide-details',
+  'hide-bottom-controls',
+  'hide-toolbar-extras',
+  'hide-trade-buttons',
+]);
+
 export function sanitizeSettingValue(
   definition: PluginSettingDefinition,
   value: unknown
@@ -140,6 +151,10 @@ export function normalizeConfig(
     config.plugins[id] = state;
   }
 
+  for (const id of OBSOLETE_PLUGIN_IDS) {
+    delete config.plugins[id];
+  }
+
   for (const plugin of defs) {
     const state = config.plugins[plugin.id] ?? makeState(plugin);
     const defaults = defaultsFor(plugin.settings);
@@ -173,12 +188,7 @@ export function migrateLegacySettings(
   }
   if (typeof legacy.cleanUi === 'boolean') {
     config.plugins['hide-ai-copilot'] = { enabled: legacy.cleanUi };
-    config.plugins['hide-community-hub'] = { enabled: legacy.cleanUi };
   }
-  if (typeof legacy.hideSidebar === 'boolean') {
-    config.plugins['hide-sidebar'] = { enabled: legacy.hideSidebar };
-  }
-
   return config;
 }
 
