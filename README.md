@@ -4,7 +4,7 @@ Local mods for **TradingView Desktop**. Linux is the tested baseline; macOS and 
 
 TVMod is a small mod host for the official Electron app. Its default **launcher backend** attaches at launch and does **not** modify `/usr/lib/tradingview`. An optional **patch backend** can embed the same preload into a user-owned copy or, with explicit elevation, the system `app.asar` for a Vencord-style install. No TradingView code is distributed.
 
-> Status: **v0.15.0, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + functional privacy and workflow plugins + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
+> Status: **v0.15.1, cross-platform launcher (Linux tested, macOS/Windows experimental) + patched-copy/in-place installer + signed plugin registry with in-app management and bulk updates + Plugin SDK v2 + functional privacy and workflow plugins + signed releases**. Verified against TradingView Desktop **3.5.0** (Electron 41.7.1) on Linux from the Arch/AUR package. Patch mode supports user-writable copies and root-owned installs with explicit `--system` elevation. Snap launch is supported experimentally; final confinement validation requires a snapd host. Microsoft Store MSIX builds are detected and rejected with an explanation.
 
 ## Features
 
@@ -93,12 +93,12 @@ To verify the Sigstore signatures, download all `.sigstore.json` assets and run:
 ```sh
 cosign verify-blob \
   --bundle tvmod-<version>-linux-x64.tar.gz.sigstore.json \
-  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.15.0 \
+  --certificate-identity https://github.com/HalloTheEngineer/TVMod/.github/workflows/release.yml@refs/tags/v0.15.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   tvmod-<version>-linux-x64.tar.gz
 ```
 
-The repo helper `tools/verify-release.sh 0.15.0` verifies every archive signature and the combined checksum.
+The repo helper `tools/verify-release.sh 0.15.1` verifies every archive signature and the combined checksum.
 
 ## Install from source
 
@@ -274,7 +274,7 @@ External plugins are embedded into the installed preload at install/add/refresh 
 Adblock uses several layers:
 
 - Hides charting-ad toast groups and promo notification groups.
-- Hides desktop “Analyze markets in TradingView Desktop” upgrade overlays by exact text and modal/overlay structure, including hashed-class overlays.
+- Hides desktop “Analyze markets in TradingView Desktop” upgrade overlays by exact text and modal/overlay structure, including hashed-class overlays. Tags are self-healing: they are removed when the upgrade copy disappears, and chart/canvas containers are never tagged.
 - Hides common upgrade/paywall modal classes when they appear.
 - Disables promo, ad-detection, and `enable_prof_popup_free` feature flags.
 

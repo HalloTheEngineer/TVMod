@@ -1,6 +1,6 @@
 {
   "name": "tvmod",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Local modification host for TradingView Desktop",
   "private": true,
   "type": "module",

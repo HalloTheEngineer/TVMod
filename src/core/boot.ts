@@ -141,9 +141,7 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
 
   const shouldDisableFlag = (key: string): boolean =>
     (settings.adblock &&
-      (isPromoFlag(key) ||
-        key === 'enable_ad_block_detect' ||
-        key === 'enable_prof_popup_free')) ||
+      (isPromoFlag(key) || key === 'enable_ad_block_detect')) ||
     (settings.disableAi && aiFlagPattern.test(key)) ||
     (settings.privacy &&
       (privacyFlagPattern.test(key) || key === 'enable_ad_block_detect'));
@@ -183,125 +181,6 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
     return value;
   };
 
-  if (
-    settings.adblock &&
-    typeof MutationObserver !== 'undefined' &&
-    typeof document !== 'undefined'
-  ) {
-    const upgradeText =
-      /Analyze markets in TradingView Desktop|full power of TradingView Desktop|Link symbols across tabs/i;
-    const upgradeAttr = 'data-tvmod-upgrade';
-    let upgradeScheduled = false;
-
-    const tagUpgradeModal = (start: Element | null): void => {
-      if (!start || start === document.body || start === document.documentElement) {
-        return;
-      }
-      if (start.closest(`[${upgradeAttr}]`)) return;
-      const startText = start.textContent ?? '';
-      if (startText.length > 4000) return;
-      if (!upgradeText.test(startText)) return;
-
-      let node: Element | null = start;
-      let target: Element = start;
-      let overlay: Element | null = null;
-
-      for (let depth = 0; depth < 12 && node; depth += 1) {
-        if (node === document.body || node === document.documentElement) break;
-        const className =
-          typeof node.className === 'string' ? node.className : '';
-        const role = node.getAttribute('role');
-        const ariaModal = node.getAttribute('aria-modal');
-
-        if (
-          role === 'dialog' ||
-          role === 'alertdialog' ||
-          ariaModal === 'true' ||
-          /modal|overlay|paywall|upgrade|backdrop/i.test(className)
-        ) {
-          target = node;
-        }
-
-        try {
-          const style = getComputedStyle(node);
-          const rect = node.getBoundingClientRect();
-          const textLength = (node.textContent ?? '').length;
-          const safeOverlay =
-            !/layout|chart|app|workspace/i.test(className) &&
-            textLength <= 4000 &&
-            node.childElementCount <= 12;
-          if (
-            safeOverlay &&
-            (style.position === 'fixed' || style.position === 'absolute') &&
-            rect.width >= innerWidth * 0.6 &&
-            rect.height >= innerHeight * 0.5
-          ) {
-            overlay = node;
-          }
-        } catch {
-          // Ignore layout failures.
-        }
-
-        node = node.parentElement;
-      }
-
-      (overlay ?? target).setAttribute(upgradeAttr, '1');
-    };
-
-    const inspectUpgradeNode = (node: Node | null): void => {
-      if (!node) return;
-      const element =
-        node.nodeType === Node.ELEMENT_NODE
-          ? (node as Element)
-          : node.parentElement;
-      tagUpgradeModal(element);
-    };
-
-    const scheduleUpgradeCheck = (): void => {
-      if (upgradeScheduled) return;
-      upgradeScheduled = true;
-      setTimeout(() => {
-        upgradeScheduled = false;
-        if (document.querySelector(`[${upgradeAttr}]`)) return;
-        for (const candidate of document.querySelectorAll(
-          '[role="dialog"], [role="alertdialog"], [aria-modal="true"], [class*="modal"], [class*="Modal"], [class*="overlay"], [class*="Overlay"], [class*="paywall"], [class*="Paywall"], [class*="upgrade"], [class*="Upgrade"]'
-        )) {
-          tagUpgradeModal(candidate);
-        }
-      }, 150);
-    };
-
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        if (record.type === 'childList') {
-          for (const node of record.addedNodes) inspectUpgradeNode(node);
-        } else if (record.type === 'characterData') {
-          inspectUpgradeNode(record.target.parentElement);
-        }
-      }
-      scheduleUpgradeCheck();
-    });
-
-    const startUpgradeObserver = (): void => {
-      const root = document.documentElement;
-      if (!root) {
-        document.addEventListener('DOMContentLoaded', startUpgradeObserver, {
-          once: true,
-        });
-        return;
-      }
-      observer.observe(root, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
-      scheduleUpgradeCheck();
-      w.__TVMOD_UPGRADE_OBSERVER__ = observer;
-    };
-
-    startUpgradeObserver();
-  }
-
   if (settings.privacy) {
     try {
       const blockedHosts = settings.privacyHosts;
@@ -320,6 +199,14 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
             return false;
           }
           const host = parsed.hostname.toLowerCase();
+          if (
+            host === 'tradingview.com' ||
+            host.endsWith('.tradingview.com') ||
+            host.endsWith('.tradingviewcdn.com') ||
+            host.endsWith('.tvcdn.com')
+          ) {
+            return false;
+          }
           return blockedHosts.some(
             (entry) => host === entry || host.endsWith('.' + entry)
           );
@@ -357,27 +244,16 @@ export function installBootHooks(settings: BootSettings, meta: BootMeta): void {
 
         NativeXhr.prototype.open = function (
           this: XMLHttpRequest,
-          method: string,
-          url: string | URL,
-          async?: boolean,
-          username?: string | null,
-          password?: string | null
+          ...args: Parameters<typeof originalOpen>
         ): void {
           const xhr = this as XMLHttpRequest & { __tvmodBlocked?: boolean };
-          if (blocked(url)) {
+          if (blocked(args[1])) {
             xhr.__tvmodBlocked = true;
             countBlocked();
             return;
           }
           xhr.__tvmodBlocked = false;
-          return originalOpen.call(
-            this,
-            method,
-            url,
-            async ?? true,
-            username ?? null,
-            password ?? null
-          );
+          return originalOpen.apply(this, args);
         } as typeof XMLHttpRequest.prototype.open;
 
         NativeXhr.prototype.send = function (
